@@ -10,6 +10,7 @@ from settings import load_settings, save_settings as persist_settings
 from lyrics_processing import process_lyrics_file
 from scraping_helpers import (
     SONG_CONTAINER_CLASSES,
+    SONG_CONTAINER_CSS,
     TITLE_SELECTORS,
     AUTHOR_SELECTORS,
     try_extract_text,
@@ -272,12 +273,9 @@ class SongSelectApp:
             print("Waiting for search results to load...")
 
             # Wait for search results — try multiple container class names
-            container_selector = ", ".join(
-                f".{cls}" for cls in SONG_CONTAINER_CLASSES
-            )
             WebDriverWait(self.driver, 20).until(
                 EC.presence_of_all_elements_located(
-                    (By.CSS_SELECTOR, container_selector)
+                    (By.CSS_SELECTOR, SONG_CONTAINER_CSS)
                 )
             )
             print("Search results loaded successfully!")

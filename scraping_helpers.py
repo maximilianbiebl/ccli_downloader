@@ -8,6 +8,9 @@ from selenium.webdriver.common.by import By
 # CSS class selectors to try for finding song result containers (in order)
 SONG_CONTAINER_CLASSES = ["song-result", "song-item"]
 
+# Combined CSS selector string for WebDriverWait
+SONG_CONTAINER_CSS = ", ".join(f".{cls}" for cls in SONG_CONTAINER_CLASSES)
+
 # Strategies to extract the song title from within a song result element.
 # Each entry is (By strategy, selector string).
 TITLE_SELECTORS = [
