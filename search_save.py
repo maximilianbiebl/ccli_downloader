@@ -5,9 +5,10 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 import time
 import os
+import urllib.parse
 
 from settings import load_settings, save_settings as persist_settings
-from lyrics_processing import process_lyrics_file
+from lyrics_processing import process_lyrics_file, rename_with_line_count
 from scraping_helpers import (
     SONG_CONTAINER_CLASSES,
     SONG_CONTAINER_CSS,
@@ -93,6 +94,19 @@ class SongSelectApp:
         )
         self.separator_entry.pack(side="left", padx=5)
 
+        # Empty line separator checkbox
+        self.empty_line_var = tk.BooleanVar(
+            value=self.settings.get("use_empty_line_separator", False)
+        )
+        self.empty_line_cb = tk.Checkbutton(
+            sep_frame,
+            text="Use empty lines",
+            variable=self.empty_line_var,
+            command=self._toggle_separator_entry,
+        )
+        self.empty_line_cb.pack(side="left", padx=5)
+        self._toggle_separator_entry()
+
         # Lines per Slide
         lines_frame = tk.Frame(settings_frame)
         lines_frame.pack(fill="x", pady=2)
@@ -100,6 +114,16 @@ class SongSelectApp:
         self.lines_var = tk.StringVar(value=str(self.settings["lines_per_slide"]))
         self.lines_entry = tk.Entry(lines_frame, textvariable=self.lines_var, width=5)
         self.lines_entry.pack(side="left", padx=5)
+
+        # Add line count to filename checkbox
+        self.line_count_filename_var = tk.BooleanVar(
+            value=self.settings.get("add_line_count_to_filename", False)
+        )
+        tk.Checkbutton(
+            lines_frame,
+            text="Add to filename (e.g. _2-zeilig)",
+            variable=self.line_count_filename_var,
+        ).pack(side="left", padx=5)
 
         # Save Settings button
         tk.Button(
@@ -203,6 +227,13 @@ class SongSelectApp:
     # Settings helpers
     # ------------------------------------------------------------------
 
+    def _toggle_separator_entry(self):
+        """Enable/disable the separator text field based on checkbox state."""
+        if self.empty_line_var.get():
+            self.separator_entry.config(state="disabled")
+        else:
+            self.separator_entry.config(state="normal")
+
     def browse_folder(self):
         """Open a folder browser dialog."""
         folder = filedialog.askdirectory(
@@ -227,6 +258,8 @@ class SongSelectApp:
         self.settings["output_folder"] = self.folder_var.get()
         self.settings["line_separator"] = self.separator_var.get()
         self.settings["lines_per_slide"] = lines_per_slide
+        self.settings["use_empty_line_separator"] = self.empty_line_var.get()
+        self.settings["add_line_count_to_filename"] = self.line_count_filename_var.get()
 
         persist_settings(self.settings)
 
@@ -260,16 +293,13 @@ class SongSelectApp:
 
             print(f"Initiating search for: {query}")
 
-            # Navigate to the search page for a clean state
-            self.driver.get(SONGSELECT_URL)
-
-            # Locate the search bar and enter the query
-            search_input = WebDriverWait(self.driver, 20).until(
-                EC.presence_of_element_located((By.ID, "SearchTextInput-1"))
+            # Navigate directly to the search results page (faster than
+            # loading homepage → typing → pressing Enter)
+            search_url = (
+                f"{SONGSELECT_URL}/search/lyrics/"
+                f"{urllib.parse.quote(query)}"
             )
-            search_input.clear()
-            search_input.send_keys(query)
-            search_input.send_keys("\n")
+            self.driver.get(search_url)
 
             print("Waiting for search results to load...")
 
@@ -371,22 +401,30 @@ class SongSelectApp:
             )
             download_button.click()
 
-            # Wait for the download to complete
+            # Wait for the download to complete (poll instead of fixed sleep)
             print("Downloading lyrics file...")
-            time.sleep(5)
+            new_files = self._wait_for_download(output_folder, files_before)
 
-            # Find and post-process newly downloaded files
-            files_after = set(os.listdir(output_folder))
-            new_files = files_after - files_before
+            # Determine effective separator
+            if self.settings.get("use_empty_line_separator", False):
+                effective_separator = ""
+            else:
+                effective_separator = self.settings.get("line_separator", "//")
+                if not effective_separator:
+                    effective_separator = None
 
+            lines_per_slide = self.settings.get("lines_per_slide", 2)
+            add_count = self.settings.get("add_line_count_to_filename", False)
+
+            # Post-process newly downloaded files
             for new_file in new_files:
                 if new_file.endswith(".txt"):
                     filepath = os.path.join(output_folder, new_file)
                     process_lyrics_file(
-                        filepath,
-                        self.settings.get("line_separator", "//"),
-                        self.settings.get("lines_per_slide", 2),
+                        filepath, effective_separator, lines_per_slide
                     )
+                    if add_count:
+                        rename_with_line_count(filepath, lines_per_slide)
 
             messagebox.showinfo("Status", "Song lyrics downloaded successfully.")
         except Exception as e:
@@ -402,6 +440,29 @@ class SongSelectApp:
                     self.do_login()
             else:
                 messagebox.showerror("Error", f"Failed to save song: {e}")
+
+    @staticmethod
+    def _wait_for_download(folder, files_before, timeout=15, poll=0.5):
+        """Poll *folder* until a new file appears (download complete).
+
+        Returns the set of new filenames.  Falls back to a short sleep if
+        nothing appears within *timeout* seconds.
+        """
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            current = set(os.listdir(folder)) if os.path.exists(folder) else set()
+            new = current - files_before
+            # Ignore partial Chrome downloads (.crdownload)
+            done = {f for f in new if not f.endswith(".crdownload")}
+            if done:
+                return done
+            time.sleep(poll)
+        # Last check after timeout
+        current = set(os.listdir(folder)) if os.path.exists(folder) else set()
+        return {
+            f for f in (current - files_before)
+            if not f.endswith(".crdownload")
+        }
 
     def reset_search(self):
         """Reset the search fields and results."""

@@ -22,7 +22,7 @@ from update_cookies import (
 )
 from browser_utils import detect_chrome_version
 from settings import load_settings, save_settings, DEFAULT_SETTINGS
-from lyrics_processing import process_lyrics_file
+from lyrics_processing import process_lyrics_file, rename_with_line_count
 
 
 class TestValidateCookies(unittest.TestCase):
@@ -301,6 +301,8 @@ class TestSettings(unittest.TestCase):
         self.assertEqual(settings["output_folder"], "./songs")
         self.assertEqual(settings["line_separator"], "//")
         self.assertEqual(settings["lines_per_slide"], 2)
+        self.assertFalse(settings["use_empty_line_separator"])
+        self.assertFalse(settings["add_line_count_to_filename"])
 
     def test_save_and_load(self):
         """Round-trips settings through save and load."""
@@ -323,6 +325,23 @@ class TestSettings(unittest.TestCase):
         self.assertEqual(loaded["output_folder"], "/custom")
         self.assertEqual(loaded["line_separator"], "//")
         self.assertEqual(loaded["lines_per_slide"], 2)
+        self.assertFalse(loaded["use_empty_line_separator"])
+        self.assertFalse(loaded["add_line_count_to_filename"])
+
+    def test_save_and_load_new_settings(self):
+        """Round-trips the new boolean settings."""
+        settings = {
+            "output_folder": "/tmp/test",
+            "line_separator": "//",
+            "lines_per_slide": 3,
+            "use_empty_line_separator": True,
+            "add_line_count_to_filename": True,
+        }
+        save_settings(settings)
+        loaded = load_settings()
+        self.assertTrue(loaded["use_empty_line_separator"])
+        self.assertTrue(loaded["add_line_count_to_filename"])
+        self.assertEqual(loaded["lines_per_slide"], 3)
 
     def test_load_handles_corrupted_file(self):
         """Returns defaults when settings.json is invalid JSON."""
@@ -401,17 +420,35 @@ class TestProcessLyrics(unittest.TestCase):
         self.assertEqual(lines[5], "D")
         self.assertEqual(lines[6], "//")
 
-    def test_no_processing_when_separator_empty(self):
-        """No separator added when separator string is empty."""
+    def test_no_processing_when_separator_none(self):
+        """No separator added when separator is None."""
         filepath = os.path.join(self.test_dir, "test.txt")
         with open(filepath, "w") as f:
             f.write("A\nB\nC\nD")
 
-        process_lyrics_file(filepath, "", 2)
+        process_lyrics_file(filepath, None, 2)
 
         with open(filepath, "r") as f:
             content = f.read()
         self.assertEqual(content, "A\nB\nC\nD")
+
+    def test_empty_string_separator_inserts_blank_lines(self):
+        """Empty string separator inserts blank lines between slides."""
+        filepath = os.path.join(self.test_dir, "test.txt")
+        with open(filepath, "w") as f:
+            f.write("Line 1\nLine 2\nLine 3\nLine 4")
+
+        process_lyrics_file(filepath, "", 2)
+
+        with open(filepath, "r") as f:
+            lines = f.read().split("\n")
+
+        self.assertEqual(lines[0], "Line 1")
+        self.assertEqual(lines[1], "Line 2")
+        self.assertEqual(lines[2], "")
+        self.assertEqual(lines[3], "Line 3")
+        self.assertEqual(lines[4], "Line 4")
+        self.assertEqual(lines[5], "")
 
     def test_no_processing_when_lines_per_slide_zero(self):
         """No separator added when lines_per_slide < 1."""
@@ -424,6 +461,48 @@ class TestProcessLyrics(unittest.TestCase):
         with open(filepath, "r") as f:
             content = f.read()
         self.assertEqual(content, "A\nB")
+
+
+class TestRenameWithLineCount(unittest.TestCase):
+    """Tests for lyrics_processing.rename_with_line_count."""
+
+    def setUp(self):
+        self.test_dir = tempfile.mkdtemp()
+
+    def test_renames_file_with_line_count(self):
+        """Renames 'Song.txt' to 'Song_2-zeilig.txt'."""
+        filepath = os.path.join(self.test_dir, "Way Maker.txt")
+        with open(filepath, "w") as f:
+            f.write("content")
+
+        new_path = rename_with_line_count(filepath, 2)
+
+        self.assertTrue(new_path.endswith("Way Maker_2-zeilig.txt"))
+        self.assertTrue(os.path.exists(new_path))
+        self.assertFalse(os.path.exists(filepath))
+
+    def test_renames_with_different_line_count(self):
+        """Renames with correct line count value."""
+        filepath = os.path.join(self.test_dir, "Title.txt")
+        with open(filepath, "w") as f:
+            f.write("content")
+
+        new_path = rename_with_line_count(filepath, 4)
+
+        self.assertTrue(new_path.endswith("Title_4-zeilig.txt"))
+        self.assertTrue(os.path.exists(new_path))
+
+    def test_preserves_file_content(self):
+        """File content is preserved after renaming."""
+        filepath = os.path.join(self.test_dir, "Test.txt")
+        with open(filepath, "w") as f:
+            f.write("hello\nworld")
+
+        new_path = rename_with_line_count(filepath, 3)
+
+        with open(new_path, "r") as f:
+            content = f.read()
+        self.assertEqual(content, "hello\nworld")
 
 
 class TestTryExtractText(unittest.TestCase):

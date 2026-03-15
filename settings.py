@@ -12,6 +12,8 @@ DEFAULT_SETTINGS = {
     "output_folder": "./songs",
     "line_separator": "//",
     "lines_per_slide": 2,
+    "use_empty_line_separator": False,
+    "add_line_count_to_filename": False,
 }
 
 
