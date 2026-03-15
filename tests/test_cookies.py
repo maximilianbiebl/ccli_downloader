@@ -22,7 +22,7 @@ from update_cookies import (
 )
 from browser_utils import detect_chrome_version
 from settings import load_settings, save_settings, DEFAULT_SETTINGS
-from lyrics_processing import process_lyrics_file, rename_with_line_count, is_section_label, merge_section_labels, merge_section_labels_file
+from lyrics_processing import process_lyrics_file, rename_with_line_count, is_section_label, is_metadata_line, merge_section_labels, merge_section_labels_file
 
 
 class TestValidateCookies(unittest.TestCase):
@@ -555,6 +555,39 @@ class TestIsSectionLabel(unittest.TestCase):
         self.assertTrue(is_section_label("  Verse 1  "))
 
 
+class TestIsMetadataLine(unittest.TestCase):
+    """Tests for lyrics_processing.is_metadata_line."""
+
+    def test_copyright_symbol(self):
+        self.assertTrue(is_metadata_line("© 2015 Music by Elevation Worship"))
+
+    def test_ccli_liednummer(self):
+        self.assertTrue(is_metadata_line("CCLI-Liednummer: 7051511"))
+
+    def test_ccli_song_number(self):
+        self.assertTrue(is_metadata_line("CCLI Song #: 7051511"))
+
+    def test_songselect(self):
+        self.assertTrue(is_metadata_line(
+            "For use solely with the SongSelect® Terms of Use. All rights reserved. www.ccli.com"
+        ))
+
+    def test_ccli_com(self):
+        self.assertTrue(is_metadata_line("www.ccli.com"))
+
+    def test_all_rights_reserved(self):
+        self.assertTrue(is_metadata_line("All rights reserved."))
+
+    def test_regular_lyrics_not_metadata(self):
+        self.assertFalse(is_metadata_line("Are you hurting and broken within"))
+
+    def test_section_label_not_metadata(self):
+        self.assertFalse(is_metadata_line("Verse 1"))
+
+    def test_empty_string_not_metadata(self):
+        self.assertFalse(is_metadata_line(""))
+
+
 class TestMergeSectionLabels(unittest.TestCase):
     """Tests for lyrics_processing.merge_section_labels."""
 
@@ -577,10 +610,10 @@ class TestMergeSectionLabels(unittest.TestCase):
         self.assertEqual(result, "[Verse 1] I lay my life down")
 
     def test_label_at_end_of_file(self):
-        text = "Line A\nVerse 2"
+        text = "Verse 1\nLine A\nVerse 2"
         result = merge_section_labels(text)
         lines = result.splitlines()
-        self.assertEqual(lines[0], "Line A")
+        self.assertEqual(lines[0], "[Verse 1] Line A")
         self.assertEqual(lines[1], "[Verse 2]")
 
     def test_no_labels(self):
@@ -616,6 +649,53 @@ class TestMergeSectionLabels(unittest.TestCase):
         self.assertEqual(lines[4], "[Verse 2] You are always")
         self.assertEqual(lines[5], "Always there")
         self.assertEqual(len(lines), 6)
+
+    def test_strips_title_before_first_section(self):
+        """Title line before the first section label should be removed."""
+        text = "O Come To The Altar\n\nVerse 1\nI lay my life down"
+        result = merge_section_labels(text)
+        self.assertEqual(result, "[Verse 1] I lay my life down")
+
+    def test_strips_metadata_footer(self):
+        """Footer metadata (author, ©, CCLI number) should be removed."""
+        text = (
+            "Verse 1\nLine A\nLine B\n\n"
+            "Author Name\n"
+            "© 2015 Publisher\n"
+            "For use solely with the SongSelect® Terms of Use.\n"
+            "CCLI-Liednummer: 7051511"
+        )
+        result = merge_section_labels(text)
+        lines = result.splitlines()
+        self.assertEqual(lines[0], "[Verse 1] Line A")
+        self.assertEqual(lines[1], "Line B")
+        self.assertEqual(len(lines), 2)
+
+    def test_strips_title_and_metadata(self):
+        """Both title and footer metadata should be stripped together."""
+        text = (
+            "O Come To The Altar\n\n"
+            "Verse 1\n"
+            "Are you hurting and broken within\n"
+            "Overwhelmed by the weight of your sin\n"
+            "Jesus is calling\n\n"
+            "Chorus\n"
+            "O come to the altar\n"
+            "The Father's arms are open wide\n\n"
+            "Chris Brown, Mack Brock, Steven Furtick, Wade Joye\n"
+            "© 2015 Music by Elevation Worship Publishing\n"
+            "For use solely with the SongSelect® Terms of Use. "
+            "All rights reserved. www.ccli.com\n"
+            "CCLI-Liednummer: 7051511"
+        )
+        result = merge_section_labels(text)
+        lines = result.splitlines()
+        self.assertEqual(lines[0], "[Verse 1] Are you hurting and broken within")
+        self.assertEqual(lines[1], "Overwhelmed by the weight of your sin")
+        self.assertEqual(lines[2], "Jesus is calling")
+        self.assertEqual(lines[3], "[Chorus] O come to the altar")
+        self.assertEqual(lines[4], "The Father's arms are open wide")
+        self.assertEqual(len(lines), 5)
 
 
 class TestMergeSectionLabelsFile(unittest.TestCase):
@@ -727,6 +807,46 @@ class TestMergeSectionLabelsFile(unittest.TestCase):
         self.assertEqual(lines[10], "The Father's arms are open wide")
         self.assertEqual(lines[11], "")
         self.assertEqual(lines[12], "Forgiveness was bought with")
+
+    def test_end_to_end_real_ccli_download(self):
+        """Full pipeline with a realistic CCLI download including title and footer."""
+        filepath = os.path.join(self.test_dir, "song.txt")
+        with open(filepath, "w") as f:
+            f.write(
+                "O Come To The Altar\n"
+                "\n"
+                "Verse 1\n"
+                "Are you hurting and broken within\n"
+                "Overwhelmed by the weight of your sin\n"
+                "Jesus is calling\n"
+                "\n"
+                "Chorus\n"
+                "O come to the altar\n"
+                "The Father's arms are open wide\n"
+                "\n"
+                "Chris Brown, Mack Brock, Steven Furtick, Wade Joye\n"
+                "© 2015 Music by Elevation Worship Publishing\n"
+                "For use solely with the SongSelect® Terms of Use. "
+                "All rights reserved. www.ccli.com\n"
+                "CCLI-Liednummer: 7051511\n"
+            )
+
+        merge_section_labels_file(filepath)
+        process_lyrics_file(filepath, "", 2)
+
+        with open(filepath, "r") as f:
+            lines = f.read().splitlines()
+
+        # Title and metadata should be stripped; only lyrics remain
+        self.assertEqual(lines[0], "[Verse 1] Are you hurting and broken within")
+        self.assertEqual(lines[1], "Overwhelmed by the weight of your sin")
+        self.assertEqual(lines[2], "")
+        self.assertEqual(lines[3], "Jesus is calling")
+        self.assertEqual(lines[4], "[Chorus] O come to the altar")
+        self.assertEqual(lines[5], "")
+        self.assertEqual(lines[6], "The Father's arms are open wide")
+        # No author/copyright/CCLI lines should appear
+        self.assertEqual(len(lines), 7)
 
 
 class TestTryExtractText(unittest.TestCase):

@@ -15,6 +15,12 @@ _SECTION_LABEL_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Patterns that identify CCLI footer/metadata lines (author, copyright, licence).
+_METADATA_RE = re.compile(
+    r"©|CCLI[\s\-]|ccli\.com|SongSelect|All rights reserved",
+    re.IGNORECASE,
+)
+
 
 def is_section_label(line):
     """Return *True* if *line* looks like a CCLI section label.
@@ -22,6 +28,16 @@ def is_section_label(line):
     Examples: ``Verse 1``, ``Chorus``, ``Pre-Chorus 2``, ``Bridge``.
     """
     return bool(_SECTION_LABEL_RE.match(line.strip()))
+
+
+def is_metadata_line(line):
+    """Return *True* if *line* looks like a CCLI footer/metadata line.
+
+    Matches copyright notices (``©``), CCLI references, SongSelect
+    licence text, and similar non-lyrics content that appears at the end
+    of CCLI SongSelect download files.
+    """
+    return bool(_METADATA_RE.search(line))
 
 
 def merge_section_labels(text):
@@ -47,6 +63,33 @@ def merge_section_labels(text):
         The transformed lyrics content.
     """
     lines = text.splitlines()
+
+    # --- Strip title: drop everything before the first section label ---
+    first_section = 0
+    for idx, line in enumerate(lines):
+        if is_section_label(line.strip()):
+            first_section = idx
+            break
+    lines = lines[first_section:]
+
+    # --- Strip footer metadata (author, ©, CCLI number, licence) ---
+    # Find the first metadata-pattern line and walk backwards to include
+    # any preceding non-blank lines in the same block (e.g. author names).
+    meta_start = len(lines)
+    for idx, line in enumerate(lines):
+        if is_metadata_line(line):
+            meta_start = idx
+            # Walk backwards over non-blank, non-section-label lines
+            # that belong to the same metadata block.
+            while meta_start > 0:
+                prev = lines[meta_start - 1].strip()
+                if not prev or is_section_label(prev):
+                    break
+                meta_start -= 1
+            break
+    lines = lines[:meta_start]
+
+    # --- Merge section labels with the next content line and strip blanks ---
     merged = []
     i = 0
     while i < len(lines):
