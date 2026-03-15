@@ -1,22 +1,31 @@
 import os
-import subprocess
+import tkinter as tk
+
+from search_save import SongSelectApp
 
 COOKIE_FILE = "Cookie.txt"
 
 
 def main():
-    if not os.path.exists(COOKIE_FILE):
-        print("No cookies found. You need to log in first.")
-        print("Launching cookie update tool...")
-        subprocess.run(["python", "update_cookies.py"])
+    driver = None
 
-        # After cookie update, check if cookies were saved successfully
-        if not os.path.exists(COOKIE_FILE):
-            print("Cookie update was not completed. Exiting.")
-            return
+    # Try to login with existing cookies
+    if os.path.exists(COOKIE_FILE):
+        print("Cookies found. Attempting login...")
+        try:
+            from login_module import execute_login
+            driver = execute_login()
+        except Exception as e:
+            print(f"Login with saved cookies failed: {e}")
+            driver = None
+    else:
+        print("No cookies found. You can log in via the GUI.")
 
-    print("Cookies found. Starting main application...")
-    subprocess.run(["python", "main.py"])
+    # Launch GUI — works with or without an active driver
+    print("Launching GUI...")
+    root = tk.Tk()
+    app = SongSelectApp(root, driver)
+    root.mainloop()
 
 
 if __name__ == "__main__":

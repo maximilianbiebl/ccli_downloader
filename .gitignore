@@ -2,6 +2,9 @@
 Cookie.txt
 RequestVerificationToken.txt
 
+# User settings
+settings.json
+
 # Credentials file
 variables.py
 

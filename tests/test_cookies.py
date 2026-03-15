@@ -1,5 +1,6 @@
 """Tests for the cookie-based login functionality."""
 
+import json
 import os
 import tempfile
 import unittest
@@ -20,6 +21,8 @@ from update_cookies import (
     CLOUDFLARE_COOKIES,
 )
 from browser_utils import detect_chrome_version
+from settings import load_settings, save_settings, DEFAULT_SETTINGS
+from lyrics_processing import process_lyrics_file
 
 
 class TestValidateCookies(unittest.TestCase):
@@ -279,6 +282,148 @@ class TestDetectChromeVersion(unittest.TestCase):
         )
         version = detect_chrome_version()
         self.assertEqual(version, 146)
+
+
+class TestSettings(unittest.TestCase):
+    """Tests for settings persistence."""
+
+    def setUp(self):
+        self.test_dir = tempfile.mkdtemp()
+        self.orig_dir = os.getcwd()
+        os.chdir(self.test_dir)
+
+    def tearDown(self):
+        os.chdir(self.orig_dir)
+
+    def test_load_defaults_when_no_file(self):
+        """Returns defaults when settings.json doesn't exist."""
+        settings = load_settings()
+        self.assertEqual(settings["output_folder"], "./songs")
+        self.assertEqual(settings["line_separator"], "//")
+        self.assertEqual(settings["lines_per_slide"], 2)
+
+    def test_save_and_load(self):
+        """Round-trips settings through save and load."""
+        settings = {
+            "output_folder": "/tmp/mydir",
+            "line_separator": "---",
+            "lines_per_slide": 4,
+        }
+        save_settings(settings)
+        loaded = load_settings()
+        self.assertEqual(loaded["output_folder"], "/tmp/mydir")
+        self.assertEqual(loaded["line_separator"], "---")
+        self.assertEqual(loaded["lines_per_slide"], 4)
+
+    def test_load_merges_with_defaults(self):
+        """Partial settings file gets merged with defaults."""
+        with open("settings.json", "w") as f:
+            json.dump({"output_folder": "/custom"}, f)
+        loaded = load_settings()
+        self.assertEqual(loaded["output_folder"], "/custom")
+        self.assertEqual(loaded["line_separator"], "//")
+        self.assertEqual(loaded["lines_per_slide"], 2)
+
+    def test_load_handles_corrupted_file(self):
+        """Returns defaults when settings.json is invalid JSON."""
+        with open("settings.json", "w") as f:
+            f.write("not valid json")
+        settings = load_settings()
+        self.assertEqual(settings, DEFAULT_SETTINGS)
+
+
+class TestProcessLyrics(unittest.TestCase):
+    """Tests for lyrics post-processing with line separators."""
+
+    def setUp(self):
+        self.test_dir = tempfile.mkdtemp()
+
+    def test_adds_separator_every_2_lines(self):
+        filepath = os.path.join(self.test_dir, "test.txt")
+        with open(filepath, "w") as f:
+            f.write("Line 1\nLine 2\nLine 3\nLine 4")
+
+        process_lyrics_file(filepath, "//", 2)
+
+        with open(filepath, "r") as f:
+            lines = f.read().split("\n")
+
+        self.assertEqual(lines[0], "Line 1")
+        self.assertEqual(lines[1], "Line 2")
+        self.assertEqual(lines[2], "//")
+        self.assertEqual(lines[3], "Line 3")
+        self.assertEqual(lines[4], "Line 4")
+        self.assertEqual(lines[5], "//")
+
+    def test_custom_separator(self):
+        filepath = os.path.join(self.test_dir, "test.txt")
+        with open(filepath, "w") as f:
+            f.write("A\nB\nC\nD")
+
+        process_lyrics_file(filepath, "---", 2)
+
+        with open(filepath, "r") as f:
+            content = f.read()
+        self.assertIn("---", content)
+        self.assertNotIn("//", content)
+
+    def test_lines_per_slide_3(self):
+        filepath = os.path.join(self.test_dir, "test.txt")
+        with open(filepath, "w") as f:
+            f.write("A\nB\nC\nD\nE\nF")
+
+        process_lyrics_file(filepath, "//", 3)
+
+        with open(filepath, "r") as f:
+            lines = f.read().split("\n")
+
+        # After A, B, C → //, then D, E, F → //
+        self.assertEqual(lines[3], "//")
+        self.assertEqual(lines[7], "//")
+
+    def test_skips_empty_lines_in_count(self):
+        """Empty lines are preserved but not counted."""
+        filepath = os.path.join(self.test_dir, "test.txt")
+        with open(filepath, "w") as f:
+            f.write("A\nB\n\nC\nD")
+
+        process_lyrics_file(filepath, "//", 2)
+
+        with open(filepath, "r") as f:
+            lines = f.read().split("\n")
+
+        # A, B counted → // after B, then empty line, then C, D → //
+        self.assertEqual(lines[0], "A")
+        self.assertEqual(lines[1], "B")
+        self.assertEqual(lines[2], "//")
+        self.assertEqual(lines[3], "")
+        self.assertEqual(lines[4], "C")
+        self.assertEqual(lines[5], "D")
+        self.assertEqual(lines[6], "//")
+
+    def test_no_processing_when_separator_empty(self):
+        """No separator added when separator string is empty."""
+        filepath = os.path.join(self.test_dir, "test.txt")
+        with open(filepath, "w") as f:
+            f.write("A\nB\nC\nD")
+
+        process_lyrics_file(filepath, "", 2)
+
+        with open(filepath, "r") as f:
+            content = f.read()
+        self.assertEqual(content, "A\nB\nC\nD")
+
+    def test_no_processing_when_lines_per_slide_zero(self):
+        """No separator added when lines_per_slide < 1."""
+        filepath = os.path.join(self.test_dir, "test.txt")
+        with open(filepath, "w") as f:
+            f.write("A\nB")
+
+        process_lyrics_file(filepath, "//", 0)
+
+        with open(filepath, "r") as f:
+            content = f.read()
+        self.assertEqual(content, "A\nB")
 
 
 if __name__ == "__main__":
