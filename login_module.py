@@ -1,4 +1,4 @@
-from selenium import webdriver
+import undetected_chromedriver as uc
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from get_cookies_and_token import get_cookie_and_token
@@ -6,9 +6,11 @@ from get_cookies_and_token import get_cookie_and_token
 
 def execute_login():
     """
-    Launch a headless browser and set cookies from Cookie.txt.
+    Launch a browser using undetected-chromedriver and set cookies from Cookie.txt.
 
-    Returns a Selenium WebDriver instance logged into SongSelect,
+    Uses undetected-chromedriver to bypass Cloudflare Turnstile bot detection.
+
+    Returns a WebDriver instance logged into SongSelect,
     or None if login fails.
     """
     driver = None
@@ -22,15 +24,14 @@ def execute_login():
             print("Please run 'python update_cookies.py' to log in and save cookies.")
             return None
 
-        # Step 2: Launch headless browser
-        print("Launching headless browser...")
-        options = webdriver.ChromeOptions()
-        options.add_argument("--headless")
+        # Step 2: Launch browser with undetected-chromedriver
+        print("Launching browser...")
+        options = uc.ChromeOptions()
         options.add_argument("--disable-gpu")
         options.add_argument("--no-sandbox")
         options.add_argument("--window-size=1920,1080")
         options.add_argument("--disable-dev-shm-usage")
-        driver = webdriver.Chrome(options=options)
+        driver = uc.Chrome(options=options, headless=True)
 
         # Step 3: Navigate to root domain to set cookies
         print("Navigating to https://ccli.com...")

@@ -4,12 +4,14 @@ Cookie Update Tool for CCLI SongSelect.
 Opens a browser window for manual login, extracts the required cookies,
 and saves them to Cookie.txt and RequestVerificationToken.txt for future use.
 
+Uses undetected-chromedriver to avoid Cloudflare Turnstile bot detection.
+
 Usage:
     python update_cookies.py
 """
 
 import requests
-from selenium import webdriver
+import undetected_chromedriver as uc
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
@@ -24,6 +26,9 @@ REQUIRED_COOKIES = [
     ".AspNetCore.Session",
 ]
 ANTIFORGERY_COOKIE_PREFIX = ".AspNetCore.Antiforgery"
+
+# Cloudflare cookie - captured if present but not strictly required
+CLOUDFLARE_COOKIES = ["cf_clearance"]
 
 LOGIN_URL = "https://reporting.ccli.com/search"
 LOGIN_TIMEOUT = 300  # seconds to wait for manual login
@@ -46,7 +51,9 @@ def extract_required_cookies(cookies):
     for c in cookies:
         name = c["name"]
         value = c["value"]
-        if name in REQUIRED_COOKIES or name.startswith(ANTIFORGERY_COOKIE_PREFIX):
+        if (name in REQUIRED_COOKIES
+                or name.startswith(ANTIFORGERY_COOKIE_PREFIX)
+                or name in CLOUDFLARE_COOKIES):
             cookies_dict[name] = value
     return cookies_dict
 
@@ -96,13 +103,13 @@ def run_cookie_update():
         print(f"You have {LOGIN_TIMEOUT} seconds to complete the login.")
         print()
 
-        options = webdriver.ChromeOptions()
+        options = uc.ChromeOptions()
         options.add_argument("--disable-gpu")
         options.add_argument("--no-sandbox")
         options.add_argument("--window-size=1920,1080")
         options.add_argument("--disable-dev-shm-usage")
 
-        driver = webdriver.Chrome(options=options)
+        driver = uc.Chrome(options=options)
         driver.get(LOGIN_URL)
 
         print("Waiting for login to complete...")

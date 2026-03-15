@@ -10,6 +10,10 @@ def validate_cookies(cookie_string):
     for name in required:
         if name not in cookie_string:
             return False
+    # Warn if cf_clearance is missing (Cloudflare protection cookie)
+    if "cf_clearance" not in cookie_string:
+        print("Warning: cf_clearance cookie not found. Cloudflare may block requests.")
+        print("Run 'python update_cookies.py' to capture fresh cookies including Cloudflare tokens.")
     return True
 
 

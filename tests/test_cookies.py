@@ -15,6 +15,7 @@ from update_cookies import (
     extract_required_cookies,
     REQUIRED_COOKIES,
     ANTIFORGERY_COOKIE_PREFIX,
+    CLOUDFLARE_COOKIES,
 )
 
 
@@ -23,6 +24,10 @@ class TestValidateCookies(unittest.TestCase):
 
     def test_valid_cookie_string(self):
         cookie = "CCLI_JWT_AUTH=abc123; ARRAffinity=xyz; CCLI_AUTH=def"
+        self.assertTrue(validate_cookies(cookie))
+
+    def test_valid_cookie_string_with_cf_clearance(self):
+        cookie = "CCLI_JWT_AUTH=abc123; ARRAffinity=xyz; cf_clearance=abc"
         self.assertTrue(validate_cookies(cookie))
 
     def test_missing_jwt_auth(self):
@@ -35,6 +40,11 @@ class TestValidateCookies(unittest.TestCase):
 
     def test_empty_string(self):
         self.assertFalse(validate_cookies(""))
+
+    def test_warns_without_cf_clearance(self):
+        """validate_cookies still returns True without cf_clearance but prints warning."""
+        cookie = "CCLI_JWT_AUTH=abc123; ARRAffinity=xyz; CCLI_AUTH=def"
+        self.assertTrue(validate_cookies(cookie))
 
 
 class TestGetCookieAndToken(unittest.TestCase):
@@ -85,6 +95,17 @@ class TestGetCookieAndToken(unittest.TestCase):
     def test_valid_files(self):
         """Returns token and cookie when files are valid."""
         cookie_str = "CCLI_JWT_AUTH=jwt_value; ARRAffinity=arr_value; CCLI_AUTH=auth_value"
+        with open("Cookie.txt", "w") as f:
+            f.write(cookie_str)
+        with open("RequestVerificationToken.txt", "w") as f:
+            f.write("my_token")
+        token, cookie = get_cookie_and_token()
+        self.assertEqual(token, "my_token")
+        self.assertEqual(cookie, cookie_str)
+
+    def test_valid_files_with_cf_clearance(self):
+        """Returns token and cookie when files include cf_clearance."""
+        cookie_str = "CCLI_JWT_AUTH=jwt_value; ARRAffinity=arr_value; cf_clearance=cf_val"
         with open("Cookie.txt", "w") as f:
             f.write(cookie_str)
         with open("RequestVerificationToken.txt", "w") as f:
@@ -146,9 +167,39 @@ class TestExtractRequiredCookies(unittest.TestCase):
         self.assertEqual(result[".AspNetCore.Antiforgery.abc"], "6")
         self.assertNotIn("random_cookie", result)
 
+    def test_captures_cf_clearance(self):
+        """cf_clearance cookie should be captured when present."""
+        cookies = [
+            {"name": "ARRAffinity", "value": "1"},
+            {"name": "cf_clearance", "value": "cloudflare_token"},
+            {"name": "random_cookie", "value": "ignored"},
+        ]
+        result = extract_required_cookies(cookies)
+        self.assertEqual(result["cf_clearance"], "cloudflare_token")
+        self.assertEqual(result["ARRAffinity"], "1")
+        self.assertNotIn("random_cookie", result)
+
+    def test_works_without_cf_clearance(self):
+        """extract_required_cookies works when cf_clearance is not present."""
+        cookies = [
+            {"name": "ARRAffinity", "value": "1"},
+            {"name": "CCLI_JWT_AUTH", "value": "4"},
+        ]
+        result = extract_required_cookies(cookies)
+        self.assertEqual(result["ARRAffinity"], "1")
+        self.assertEqual(result["CCLI_JWT_AUTH"], "4")
+        self.assertNotIn("cf_clearance", result)
+
     def test_empty_input(self):
         result = extract_required_cookies([])
         self.assertEqual(result, {})
+
+
+class TestCloudflareConstants(unittest.TestCase):
+    """Tests for Cloudflare-related constants."""
+
+    def test_cloudflare_cookies_defined(self):
+        self.assertIn("cf_clearance", CLOUDFLARE_COOKIES)
 
 
 if __name__ == "__main__":
