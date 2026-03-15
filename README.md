@@ -1,6 +1,17 @@
 # CCLI SongSelect Downloader
 
-A tool to download song lyrics from [CCLI SongSelect](https://songselect.ccli.com) for import into programs like [FreeShow](https://freeshow.app).
+A tool to download song lyrics from [CCLI SongSelect](https://songselect.ccli.com) for import into presentation software like [FreeShow](https://freeshow.app).
+
+## Features
+
+- **Search & Download** – Search for songs by title or lyrics directly from the GUI and download them as text files.
+- **FreeShow-Compatible Formatting** – Section labels (Verse 1, Chorus, Bridge, etc.) are wrapped in square brackets and merged with the first lyrics line, e.g. `[Verse 1] I lay my life down`.
+- **Configurable Line Separators** – Insert a custom separator (e.g. `//`) or empty lines after every *N* content lines for slide-based presentation software.
+- **Lines per Slide** – Choose how many lyrics lines appear between separators (default: 2).
+- **Filename Line Count** – Optionally append `_2-zeilig` (or the configured count) to the filename.
+- **Include Metadata** – Optionally keep the song title, author, copyright (©) and CCLI number in the output file. Metadata is added *after* separator processing so it does not affect slide breaks.
+- **Persistent Settings** – All preferences (output folder, separator, lines per slide, flags) are saved to `settings.json` and restored on next launch.
+- **Login from GUI** – Log in or refresh cookies directly from the application without restarting.
 
 ## Requirements
 
@@ -46,6 +57,21 @@ Cookies expire over time. If you get authentication errors or Cloudflare blockin
 python update_cookies.py
 ```
 
+Or click **Login / Refresh Cookies** in the GUI.
+
+## Settings
+
+All settings are configurable in the GUI and saved to `settings.json`.
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| Output Folder | `./songs` | Directory where downloaded lyrics files are saved |
+| Line Separator | `//` | String inserted between slide groups (e.g. `//`, `---`) |
+| Use Empty Lines | off | Use blank lines as separators instead of the separator string |
+| Lines per Slide | `2` | Number of content lines between separators |
+| Add to Filename | off | Append `_N-zeilig` to the filename (e.g. `Way Maker_2-zeilig.txt`) |
+| Include Metadata | off | Keep song title, author, © and CCLI number in the output |
+
 ## Required Cookies
 
 The following cookies are extracted during login:
@@ -63,14 +89,23 @@ The following cookies are extracted during login:
 
 | File | Description |
 |------|-------------|
-| `start.py` | Entry point - checks for cookies and launches the app |
-| `main.py` | Main application - initializes browser and GUI |
+| `start.py` | Entry point – checks for cookies and launches the app |
+| `main.py` | Alternative entry point – initializes browser and GUI |
+| `search_save.py` | Song search and download GUI (tkinter) |
+| `settings.py` | Settings persistence (`settings.json`) |
+| `lyrics_processing.py` | Lyrics post-processing: section label merging, separators, metadata |
+| `scraping_helpers.py` | Search result scraping with multi-selector fallback |
 | `login_module.py` | Sets saved cookies on undetected browser |
 | `get_cookies_and_token.py` | Loads cookies and token from files |
-| `update_cookies.py` | Cookie update tool - manual browser login |
+| `update_cookies.py` | Cookie update tool – manual browser login |
 | `browser_utils.py` | Chrome version detection and browser creation helpers |
-| `search_save.py` | Song search and download GUI |
-| `cookie_extractor.py` | Legacy wrapper (delegates to update_cookies.py) |
+| `cookie_extractor.py` | Legacy wrapper (delegates to `update_cookies.py`) |
+
+## Running Tests
+
+```bash
+python -m unittest tests.test_cookies -v
+```
 
 ## Troubleshooting
 
