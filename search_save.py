@@ -124,6 +124,18 @@ class SongSelectApp:
             variable=self.line_count_filename_var,
         ).pack(side="left", padx=5)
 
+        # Include metadata checkbox (title + author/copyright/CCLI)
+        meta_frame = tk.Frame(settings_frame)
+        meta_frame.pack(fill="x", pady=2)
+        self.include_metadata_var = tk.BooleanVar(
+            value=self.settings.get("include_metadata", False)
+        )
+        tk.Checkbutton(
+            meta_frame,
+            text="Include metadata (title, author, © and CCLI number)",
+            variable=self.include_metadata_var,
+        ).pack(side="left")
+
         # Save Settings button
         tk.Button(
             settings_frame, text="Save Settings", command=self.save_settings
@@ -259,6 +271,7 @@ class SongSelectApp:
         self.settings["lines_per_slide"] = lines_per_slide
         self.settings["use_empty_line_separator"] = self.empty_line_var.get()
         self.settings["add_line_count_to_filename"] = self.line_count_filename_var.get()
+        self.settings["include_metadata"] = self.include_metadata_var.get()
 
         persist_settings(self.settings)
 
@@ -417,19 +430,20 @@ class SongSelectApp:
 
             lines_per_slide = self.settings.get("lines_per_slide", 2)
             add_count = self.settings.get("add_line_count_to_filename", False)
+            include_meta = self.settings.get("include_metadata", False)
 
             # Post-process newly downloaded files
             for new_file in new_files:
                 if new_file.endswith(".txt"):
                     filepath = os.path.join(output_folder, new_file)
-                    merge_section_labels_file(filepath)
+                    merge_section_labels_file(filepath, include_metadata=include_meta)
                     process_lyrics_file(
                         filepath, effective_separator, lines_per_slide
                     )
                     if add_count:
                         rename_with_line_count(filepath, lines_per_slide)
 
-            messagebox.showinfo("Status", "Song lyrics downloaded successfully.")
+            print("Song lyrics downloaded successfully.")
         except Exception as e:
             print(f"Error during song save: {e}")
             error_msg = str(e).lower()

@@ -40,7 +40,7 @@ def is_metadata_line(line):
     return bool(_METADATA_RE.search(line))
 
 
-def merge_section_labels(text):
+def merge_section_labels(text, include_metadata=False):
     """Wrap section labels in brackets and merge them with the next content line.
 
     Transforms standalone section labels (e.g. ``Verse 1``) so that they
@@ -56,6 +56,10 @@ def merge_section_labels(text):
     ----------
     text : str
         The raw lyrics content.
+    include_metadata : bool
+        When *True*, the song title (lines before the first section label)
+        and footer metadata (author, ©, CCLI number) are preserved in the
+        output.  When *False* (the default) they are stripped.
 
     Returns
     -------
@@ -64,18 +68,29 @@ def merge_section_labels(text):
     """
     lines = text.splitlines()
 
-    # --- Strip title: drop everything before the first section label ---
+    # --- Locate first section label ---
     first_section = 0
     for idx, line in enumerate(lines):
         if is_section_label(line.strip()):
             first_section = idx
             break
+
+    # --- Extract title lines (before first section label) ---
+    title_lines = []
+    if include_metadata:
+        for i in range(first_section):
+            stripped = lines[i].strip()
+            if stripped:
+                title_lines.append(stripped)
+
+    # Strip everything before the first section label
     lines = lines[first_section:]
 
     # --- Strip footer metadata (author, ©, CCLI number, licence) ---
     # Find the first metadata-pattern line and walk backwards to include
     # any preceding non-blank lines in the same block (e.g. author names).
     meta_start = len(lines)
+    footer_lines = []
     for idx, line in enumerate(lines):
         if is_metadata_line(line):
             meta_start = idx
@@ -87,6 +102,13 @@ def merge_section_labels(text):
                     break
                 meta_start -= 1
             break
+
+    if include_metadata:
+        for i in range(meta_start, len(lines)):
+            stripped = lines[i].strip()
+            if stripped:
+                footer_lines.append(stripped)
+
     lines = lines[:meta_start]
 
     # --- Merge section labels with the next content line and strip blanks ---
@@ -111,22 +133,36 @@ def merge_section_labels(text):
             # at the correct positions.
             merged.append(lines[i])
         i += 1
-    return "\n".join(merged)
+
+    # --- Assemble final output ---
+    result_parts = []
+    if title_lines:
+        result_parts.extend(title_lines)
+        result_parts.append("")  # blank line after title
+    result_parts.extend(merged)
+    if footer_lines:
+        result_parts.append("")  # blank line before footer
+        result_parts.extend(footer_lines)
+
+    return "\n".join(result_parts)
 
 
-def merge_section_labels_file(filepath):
+def merge_section_labels_file(filepath, include_metadata=False):
     """Apply :func:`merge_section_labels` to a file in-place.
 
     Parameters
     ----------
     filepath : str
         Path to the lyrics text file.
+    include_metadata : bool
+        When *True*, preserve the song title and footer metadata in the
+        output.  See :func:`merge_section_labels` for details.
     """
     try:
         with open(filepath, "r", encoding="utf-8") as f:
             content = f.read()
 
-        merged = merge_section_labels(content)
+        merged = merge_section_labels(content, include_metadata=include_metadata)
 
         with open(filepath, "w", encoding="utf-8") as f:
             f.write(merged)

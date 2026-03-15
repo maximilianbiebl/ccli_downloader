@@ -350,6 +350,19 @@ class TestSettings(unittest.TestCase):
         settings = load_settings()
         self.assertEqual(settings, DEFAULT_SETTINGS)
 
+    def test_include_metadata_default(self):
+        """include_metadata defaults to False."""
+        settings = load_settings()
+        self.assertFalse(settings["include_metadata"])
+
+    def test_save_and_load_include_metadata(self):
+        """Round-trips include_metadata through save and load."""
+        settings = dict(DEFAULT_SETTINGS)
+        settings["include_metadata"] = True
+        save_settings(settings)
+        loaded = load_settings()
+        self.assertTrue(loaded["include_metadata"])
+
 
 class TestProcessLyrics(unittest.TestCase):
     """Tests for lyrics post-processing with line separators."""
@@ -697,6 +710,69 @@ class TestMergeSectionLabels(unittest.TestCase):
         self.assertEqual(lines[4], "The Father's arms are open wide")
         self.assertEqual(len(lines), 5)
 
+    def test_include_metadata_preserves_title_and_footer(self):
+        """With include_metadata=True, title and footer are preserved."""
+        text = (
+            "O Come To The Altar\n\n"
+            "Verse 1\n"
+            "Are you hurting and broken within\n"
+            "Jesus is calling\n\n"
+            "Chris Brown, Mack Brock\n"
+            "© 2015 Music by Elevation Worship Publishing\n"
+            "CCLI-Liednummer: 7051511"
+        )
+        result = merge_section_labels(text, include_metadata=True)
+        lines = result.splitlines()
+        self.assertEqual(lines[0], "O Come To The Altar")
+        self.assertEqual(lines[1], "")
+        self.assertEqual(lines[2], "[Verse 1] Are you hurting and broken within")
+        self.assertEqual(lines[3], "Jesus is calling")
+        self.assertEqual(lines[4], "")
+        self.assertEqual(lines[5], "Chris Brown, Mack Brock")
+        self.assertEqual(lines[6], "© 2015 Music by Elevation Worship Publishing")
+        self.assertEqual(lines[7], "CCLI-Liednummer: 7051511")
+        self.assertEqual(len(lines), 8)
+
+    def test_include_metadata_false_strips_all(self):
+        """With include_metadata=False (default), title and footer are stripped."""
+        text = (
+            "Song Title\n\n"
+            "Verse 1\nLine A\n\n"
+            "Author Name\n"
+            "© 2020 Publisher\n"
+            "CCLI-Liednummer: 123456"
+        )
+        result = merge_section_labels(text, include_metadata=False)
+        lines = result.splitlines()
+        self.assertEqual(lines[0], "[Verse 1] Line A")
+        self.assertEqual(len(lines), 1)
+
+    def test_include_metadata_no_footer(self):
+        """With include_metadata=True but no footer, only title is kept."""
+        text = "My Song Title\n\nVerse 1\nLine A\nLine B"
+        result = merge_section_labels(text, include_metadata=True)
+        lines = result.splitlines()
+        self.assertEqual(lines[0], "My Song Title")
+        self.assertEqual(lines[1], "")
+        self.assertEqual(lines[2], "[Verse 1] Line A")
+        self.assertEqual(lines[3], "Line B")
+        self.assertEqual(len(lines), 4)
+
+    def test_include_metadata_no_title(self):
+        """With include_metadata=True but no title, only footer is kept."""
+        text = (
+            "Verse 1\nLine A\n\n"
+            "Author Name\n"
+            "© 2020 Publisher"
+        )
+        result = merge_section_labels(text, include_metadata=True)
+        lines = result.splitlines()
+        self.assertEqual(lines[0], "[Verse 1] Line A")
+        self.assertEqual(lines[1], "")
+        self.assertEqual(lines[2], "Author Name")
+        self.assertEqual(lines[3], "© 2020 Publisher")
+        self.assertEqual(len(lines), 4)
+
 
 class TestMergeSectionLabelsFile(unittest.TestCase):
     """Tests for lyrics_processing.merge_section_labels_file."""
@@ -847,6 +923,38 @@ class TestMergeSectionLabelsFile(unittest.TestCase):
         self.assertEqual(lines[6], "The Father's arms are open wide")
         # No author/copyright/CCLI lines should appear
         self.assertEqual(len(lines), 7)
+
+    def test_end_to_end_with_include_metadata(self):
+        """Full pipeline with include_metadata=True preserves title and footer."""
+        filepath = os.path.join(self.test_dir, "song.txt")
+        with open(filepath, "w") as f:
+            f.write(
+                "O Come To The Altar\n"
+                "\n"
+                "Verse 1\n"
+                "Are you hurting and broken within\n"
+                "Jesus is calling\n"
+                "\n"
+                "Chris Brown, Mack Brock\n"
+                "© 2015 Music by Elevation Worship Publishing\n"
+                "CCLI-Liednummer: 7051511\n"
+            )
+
+        merge_section_labels_file(filepath, include_metadata=True)
+
+        with open(filepath, "r") as f:
+            lines = f.read().splitlines()
+
+        # Title at top, lyrics in middle, footer at bottom
+        self.assertEqual(lines[0], "O Come To The Altar")
+        self.assertEqual(lines[1], "")
+        self.assertEqual(lines[2], "[Verse 1] Are you hurting and broken within")
+        self.assertEqual(lines[3], "Jesus is calling")
+        self.assertEqual(lines[4], "")
+        self.assertEqual(lines[5], "Chris Brown, Mack Brock")
+        self.assertEqual(lines[6], "© 2015 Music by Elevation Worship Publishing")
+        self.assertEqual(lines[7], "CCLI-Liednummer: 7051511")
+        self.assertEqual(len(lines), 8)
 
 
 class TestTryExtractText(unittest.TestCase):
