@@ -22,7 +22,7 @@ from update_cookies import (
 )
 from browser_utils import detect_chrome_version
 from settings import load_settings, save_settings, DEFAULT_SETTINGS
-from lyrics_processing import process_lyrics_file, rename_with_line_count, is_section_label, is_metadata_line, merge_section_labels, merge_section_labels_file
+from lyrics_processing import process_lyrics_file, rename_with_line_count, is_section_label, is_metadata_line, merge_section_labels, merge_section_labels_file, extract_metadata, add_metadata_to_file
 
 
 class TestValidateCookies(unittest.TestCase):
@@ -927,34 +927,146 @@ class TestMergeSectionLabelsFile(unittest.TestCase):
     def test_end_to_end_with_include_metadata(self):
         """Full pipeline with include_metadata=True preserves title and footer."""
         filepath = os.path.join(self.test_dir, "song.txt")
+        raw_text = (
+            "O Come To The Altar\n"
+            "\n"
+            "Verse 1\n"
+            "Are you hurting and broken within\n"
+            "Jesus is calling\n"
+            "\n"
+            "Chris Brown, Mack Brock\n"
+            "© 2015 Music by Elevation Worship Publishing\n"
+            "CCLI-Liednummer: 7051511\n"
+        )
         with open(filepath, "w") as f:
-            f.write(
-                "O Come To The Altar\n"
-                "\n"
-                "Verse 1\n"
-                "Are you hurting and broken within\n"
-                "Jesus is calling\n"
-                "\n"
-                "Chris Brown, Mack Brock\n"
-                "© 2015 Music by Elevation Worship Publishing\n"
-                "CCLI-Liednummer: 7051511\n"
-            )
+            f.write(raw_text)
 
-        merge_section_labels_file(filepath, include_metadata=True)
+        # Extract metadata before processing
+        title_lines, footer_lines = extract_metadata(raw_text)
+
+        # Merge without metadata so separators are placed correctly
+        merge_section_labels_file(filepath, include_metadata=False)
+        process_lyrics_file(filepath, "", 2)
+
+        # Add metadata back after separator processing
+        add_metadata_to_file(filepath, title_lines, footer_lines)
 
         with open(filepath, "r") as f:
             lines = f.read().splitlines()
 
-        # Title at top, lyrics in middle, footer at bottom
+        # Title at top
         self.assertEqual(lines[0], "O Come To The Altar")
         self.assertEqual(lines[1], "")
+        # Lyrics with correct separator placement
         self.assertEqual(lines[2], "[Verse 1] Are you hurting and broken within")
         self.assertEqual(lines[3], "Jesus is calling")
+        # Footer at bottom (blank line before footer)
         self.assertEqual(lines[4], "")
         self.assertEqual(lines[5], "Chris Brown, Mack Brock")
         self.assertEqual(lines[6], "© 2015 Music by Elevation Worship Publishing")
         self.assertEqual(lines[7], "CCLI-Liednummer: 7051511")
         self.assertEqual(len(lines), 8)
+
+    def test_extract_metadata_basic(self):
+        """extract_metadata returns title and footer from raw text."""
+        text = (
+            "O Come To The Altar\n"
+            "\n"
+            "Verse 1\n"
+            "Are you hurting and broken within\n"
+            "\n"
+            "Chris Brown, Mack Brock\n"
+            "© 2015 Music by Elevation Worship Publishing\n"
+            "CCLI-Liednummer: 7051511\n"
+        )
+        title, footer = extract_metadata(text)
+        self.assertEqual(title, ["O Come To The Altar"])
+        self.assertEqual(footer, [
+            "Chris Brown, Mack Brock",
+            "© 2015 Music by Elevation Worship Publishing",
+            "CCLI-Liednummer: 7051511",
+        ])
+
+    def test_extract_metadata_no_title(self):
+        """extract_metadata returns empty title when text starts with section."""
+        text = "Verse 1\nLyrics here\n\nChris Brown\n© 2020\n"
+        title, footer = extract_metadata(text)
+        self.assertEqual(title, [])
+        self.assertEqual(footer, ["Chris Brown", "© 2020"])
+
+    def test_extract_metadata_no_footer(self):
+        """extract_metadata returns empty footer when no metadata lines exist."""
+        text = "Title\n\nVerse 1\nLyrics here\n"
+        title, footer = extract_metadata(text)
+        self.assertEqual(title, ["Title"])
+        self.assertEqual(footer, [])
+
+    def test_add_metadata_to_file(self):
+        """add_metadata_to_file prepends title and appends footer."""
+        filepath = os.path.join(self.test_dir, "lyrics.txt")
+        with open(filepath, "w") as f:
+            f.write("[Verse 1] Line one\nLine two")
+
+        add_metadata_to_file(filepath, ["My Title"], ["Author", "© 2020"])
+
+        with open(filepath, "r") as f:
+            lines = f.read().splitlines()
+
+        self.assertEqual(lines[0], "My Title")
+        self.assertEqual(lines[1], "")
+        self.assertEqual(lines[2], "[Verse 1] Line one")
+        self.assertEqual(lines[3], "Line two")
+        self.assertEqual(lines[4], "")
+        self.assertEqual(lines[5], "Author")
+        self.assertEqual(lines[6], "© 2020")
+
+    def test_full_pipeline_metadata_with_separators(self):
+        """Full pipeline: metadata doesn't affect separator placement."""
+        filepath = os.path.join(self.test_dir, "song.txt")
+        raw_text = (
+            "O Come To The Altar\n"
+            "\n"
+            "Verse 1\n"
+            "Are you hurting and broken within\n"
+            "Overwhelmed by the weight of your sin\n"
+            "Jesus is calling\n"
+            "\n"
+            "Chorus\n"
+            "O come to the altar\n"
+            "The Father's arms are open wide\n"
+            "\n"
+            "Chris Brown, Mack Brock, Steven Furtick, Wade Joye\n"
+            "© 2015 Music by Elevation Worship Publishing\n"
+            "CCLI-Liednummer: 7051511\n"
+        )
+        with open(filepath, "w") as f:
+            f.write(raw_text)
+
+        title_lines, footer_lines = extract_metadata(raw_text)
+        merge_section_labels_file(filepath, include_metadata=False)
+        process_lyrics_file(filepath, "", 2)
+        add_metadata_to_file(filepath, title_lines, footer_lines)
+
+        with open(filepath, "r") as f:
+            lines = f.read().splitlines()
+
+        # Title at top
+        self.assertEqual(lines[0], "O Come To The Altar")
+        self.assertEqual(lines[1], "")
+        # Verse 1: separator after every 2 lyrics lines
+        self.assertEqual(lines[2], "[Verse 1] Are you hurting and broken within")
+        self.assertEqual(lines[3], "Overwhelmed by the weight of your sin")
+        self.assertEqual(lines[4], "")  # separator after 2 lines
+        self.assertEqual(lines[5], "Jesus is calling")
+        self.assertEqual(lines[6], "[Chorus] O come to the altar")
+        self.assertEqual(lines[7], "")  # separator after 2 lines
+        self.assertEqual(lines[8], "The Father's arms are open wide")
+        # Footer at bottom
+        self.assertEqual(lines[9], "")
+        self.assertEqual(lines[10], "Chris Brown, Mack Brock, Steven Furtick, Wade Joye")
+        self.assertEqual(lines[11], "© 2015 Music by Elevation Worship Publishing")
+        self.assertEqual(lines[12], "CCLI-Liednummer: 7051511")
+        self.assertEqual(len(lines), 13)
 
 
 class TestTryExtractText(unittest.TestCase):

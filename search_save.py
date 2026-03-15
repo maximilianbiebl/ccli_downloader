@@ -7,7 +7,7 @@ import time
 import os
 
 from settings import load_settings, save_settings as persist_settings
-from lyrics_processing import process_lyrics_file, rename_with_line_count, merge_section_labels_file
+from lyrics_processing import process_lyrics_file, rename_with_line_count, merge_section_labels_file, extract_metadata, add_metadata_to_file
 from scraping_helpers import (
     SONG_CONTAINER_CLASSES,
     SONG_CONTAINER_CSS,
@@ -436,10 +436,26 @@ class SongSelectApp:
             for new_file in new_files:
                 if new_file.endswith(".txt"):
                     filepath = os.path.join(output_folder, new_file)
-                    merge_section_labels_file(filepath, include_metadata=include_meta)
+
+                    # Extract metadata before processing if needed
+                    title_lines = []
+                    footer_lines = []
+                    if include_meta:
+                        with open(filepath, "r", encoding="utf-8") as f:
+                            raw_content = f.read()
+                        title_lines, footer_lines = extract_metadata(raw_content)
+
+                    # Always merge without metadata so separators are placed
+                    # only between lyrics lines
+                    merge_section_labels_file(filepath, include_metadata=False)
                     process_lyrics_file(
                         filepath, effective_separator, lines_per_slide
                     )
+
+                    # Add metadata back after separator processing
+                    if include_meta and (title_lines or footer_lines):
+                        add_metadata_to_file(filepath, title_lines, footer_lines)
+
                     if add_count:
                         rename_with_line_count(filepath, lines_per_slide)
 

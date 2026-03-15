@@ -40,6 +40,104 @@ def is_metadata_line(line):
     return bool(_METADATA_RE.search(line))
 
 
+def extract_metadata(text):
+    """Extract title and footer metadata from raw CCLI lyrics text.
+
+    The title is defined as the non-empty lines that appear *before* the
+    first section label (e.g. ``Verse 1``).  Footer metadata consists of
+    author names, copyright notices, and CCLI references at the end of
+    the file.
+
+    Parameters
+    ----------
+    text : str
+        The raw lyrics content as downloaded from CCLI SongSelect.
+
+    Returns
+    -------
+    tuple[list[str], list[str]]
+        ``(title_lines, footer_lines)`` – lists of stripped, non-empty
+        strings.  Either list may be empty if the corresponding section
+        is absent.
+    """
+    lines = text.splitlines()
+
+    # --- Locate first section label ---
+    first_section = 0
+    for idx, line in enumerate(lines):
+        if is_section_label(line.strip()):
+            first_section = idx
+            break
+
+    # --- Extract title lines (before first section label) ---
+    title_lines = []
+    for i in range(first_section):
+        stripped = lines[i].strip()
+        if stripped:
+            title_lines.append(stripped)
+
+    # --- Find footer metadata ---
+    lyrics_lines = lines[first_section:]
+    meta_start = len(lyrics_lines)
+    for idx, line in enumerate(lyrics_lines):
+        if is_metadata_line(line):
+            meta_start = idx
+            while meta_start > 0:
+                prev = lyrics_lines[meta_start - 1].strip()
+                if not prev or is_section_label(prev):
+                    break
+                meta_start -= 1
+            break
+
+    footer_lines = []
+    for i in range(meta_start, len(lyrics_lines)):
+        stripped = lyrics_lines[i].strip()
+        if stripped:
+            footer_lines.append(stripped)
+
+    return title_lines, footer_lines
+
+
+def add_metadata_to_file(filepath, title_lines, footer_lines):
+    """Prepend title and append footer metadata to a processed lyrics file.
+
+    This is intended to be called **after** :func:`process_lyrics_file` so
+    that line separators are placed only between lyrics lines, and the
+    metadata is added around them without affecting separator placement.
+
+    Parameters
+    ----------
+    filepath : str
+        Path to the lyrics text file (already processed).
+    title_lines : list[str]
+        Title lines to prepend.
+    footer_lines : list[str]
+        Footer metadata lines to append.
+    """
+    try:
+        with open(filepath, "r", encoding="utf-8") as f:
+            content = f.read()
+
+        parts = []
+        if title_lines:
+            parts.extend(title_lines)
+            parts.append("")  # blank line after title
+
+        # Add the existing processed content line-by-line
+        parts.extend(content.splitlines())
+
+        if footer_lines:
+            parts.append("")  # blank line before footer
+            parts.extend(footer_lines)
+
+        with open(filepath, "w", encoding="utf-8") as f:
+            f.write("\n".join(parts))
+
+        print(f"Added metadata to {os.path.basename(filepath)}")
+    except Exception as e:
+        print(f"Error adding metadata: {e}")
+
+
 def merge_section_labels(text, include_metadata=False):
     """Wrap section labels in brackets and merge them with the next content line.
 
