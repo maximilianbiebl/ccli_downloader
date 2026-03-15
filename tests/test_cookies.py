@@ -589,7 +589,11 @@ class TestMergeSectionLabels(unittest.TestCase):
         self.assertEqual(result, text)
 
     def test_full_song_format(self):
-        """Full example matching the problem statement format."""
+        """Full example matching the problem statement format.
+
+        merge_section_labels strips blank lines so that process_lyrics_file
+        can place separators at the correct positions.
+        """
         text = (
             "Verse 1\n"
             "I lay my life down at Your feet\n"
@@ -607,12 +611,11 @@ class TestMergeSectionLabels(unittest.TestCase):
         lines = result.splitlines()
         self.assertEqual(lines[0], "[Verse 1] I lay my life down at Your feet")
         self.assertEqual(lines[1], "You're the only One I need")
-        self.assertEqual(lines[2], "")
-        self.assertEqual(lines[3], "[Chorus] One way Jesus")
-        self.assertEqual(lines[4], "You're the only One that I could live for")
-        self.assertEqual(lines[5], "")
-        self.assertEqual(lines[6], "[Verse 2] You are always")
-        self.assertEqual(lines[7], "Always there")
+        self.assertEqual(lines[2], "[Chorus] One way Jesus")
+        self.assertEqual(lines[3], "You're the only One that I could live for")
+        self.assertEqual(lines[4], "[Verse 2] You are always")
+        self.assertEqual(lines[5], "Always there")
+        self.assertEqual(len(lines), 6)
 
 
 class TestMergeSectionLabelsFile(unittest.TestCase):
@@ -644,6 +647,86 @@ class TestMergeSectionLabelsFile(unittest.TestCase):
         with open(filepath, "r") as f:
             content = f.read()
         self.assertEqual(content, "Line A\nLine B")
+
+    def test_strips_blank_lines_from_ccli_format(self):
+        """CCLI files have blank lines between sections that should be stripped."""
+        filepath = os.path.join(self.test_dir, "song.txt")
+        with open(filepath, "w") as f:
+            f.write(
+                "Verse 1\n"
+                "Are you hurting and broken within\n"
+                "Overwhelmed by the weight of your sin\n"
+                "Jesus is calling\n"
+                "\n"
+                "Have you come to the end of yourself\n"
+                "Do you thirst for a drink from the well\n"
+                "\n"
+                "Jesus is calling\n"
+                "\n"
+                "Chorus\n"
+                "O come to the altar\n"
+                "The Father's arms are open wide\n"
+                "Forgiveness was bought with\n"
+            )
+
+        merge_section_labels_file(filepath)
+
+        with open(filepath, "r") as f:
+            lines = f.read().splitlines()
+
+        # All blank lines should be stripped
+        self.assertEqual(lines[0], "[Verse 1] Are you hurting and broken within")
+        self.assertEqual(lines[1], "Overwhelmed by the weight of your sin")
+        self.assertEqual(lines[2], "Jesus is calling")
+        self.assertEqual(lines[3], "Have you come to the end of yourself")
+        self.assertEqual(lines[4], "Do you thirst for a drink from the well")
+        self.assertEqual(lines[5], "Jesus is calling")
+        self.assertEqual(lines[6], "[Chorus] O come to the altar")
+        self.assertEqual(lines[7], "The Father's arms are open wide")
+        self.assertEqual(lines[8], "Forgiveness was bought with")
+        self.assertEqual(len(lines), 9)
+
+    def test_end_to_end_freeshow_format(self):
+        """Full pipeline: merge labels then add empty line separators."""
+        filepath = os.path.join(self.test_dir, "song.txt")
+        with open(filepath, "w") as f:
+            f.write(
+                "Verse 1\n"
+                "Are you hurting and broken within\n"
+                "Overwhelmed by the weight of your sin\n"
+                "Jesus is calling\n"
+                "\n"
+                "Have you come to the end of yourself\n"
+                "Do you thirst for a drink from the well\n"
+                "\n"
+                "Jesus is calling\n"
+                "\n"
+                "Chorus\n"
+                "O come to the altar\n"
+                "The Father's arms are open wide\n"
+                "Forgiveness was bought with\n"
+            )
+
+        merge_section_labels_file(filepath)
+        process_lyrics_file(filepath, "", 2)
+
+        with open(filepath, "r") as f:
+            lines = f.read().splitlines()
+
+        # Expected FreeShow format: 2 content lines, blank, 2 content lines, blank, ...
+        self.assertEqual(lines[0], "[Verse 1] Are you hurting and broken within")
+        self.assertEqual(lines[1], "Overwhelmed by the weight of your sin")
+        self.assertEqual(lines[2], "")
+        self.assertEqual(lines[3], "Jesus is calling")
+        self.assertEqual(lines[4], "Have you come to the end of yourself")
+        self.assertEqual(lines[5], "")
+        self.assertEqual(lines[6], "Do you thirst for a drink from the well")
+        self.assertEqual(lines[7], "Jesus is calling")
+        self.assertEqual(lines[8], "")
+        self.assertEqual(lines[9], "[Chorus] O come to the altar")
+        self.assertEqual(lines[10], "The Father's arms are open wide")
+        self.assertEqual(lines[11], "")
+        self.assertEqual(lines[12], "Forgiveness was bought with")
 
 
 class TestTryExtractText(unittest.TestCase):

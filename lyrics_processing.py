@@ -62,7 +62,10 @@ def merge_section_labels(text):
             else:
                 # Label at end of file with no following content
                 merged.append(label)
-        else:
+        elif stripped:
+            # Only keep non-empty lines; blank lines from the source are
+            # discarded so that process_lyrics_file can place separators
+            # at the correct positions.
             merged.append(lines[i])
         i += 1
     return "\n".join(merged)
