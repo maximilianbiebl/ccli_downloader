@@ -1,53 +1,55 @@
-import requests
-from cookie_extractor import gui_login
 import os
+
+COOKIE_FILE = "Cookie.txt"
+TOKEN_FILE = "RequestVerificationToken.txt"
+
+
+def validate_cookies(cookie_string):
+    """Basic validation that the cookie string contains expected cookies."""
+    required = ["CCLI_JWT_AUTH", "ARRAffinity"]
+    for name in required:
+        if name not in cookie_string:
+            return False
+    return True
 
 
 def get_cookie_and_token():
+    """
+    Load cookies and token from Cookie.txt and RequestVerificationToken.txt.
 
-    try:
-        # Read RequestVerificationToken from a file
-        print("Attempting to get RequestVerificationToken and Cookie from file.")
+    If the files do not exist or are invalid, instructs the user to run
+    update_cookies.py to perform a manual login and save fresh cookies.
 
-        # check if file ReqyestVerificationToken.txt exists
-        if not os.path.exists("RequestVerificationToken.txt") or not os.path.exists(
-            "Cookie.txt"
-        ):
-            raise Exception(
-                "File RequestVerificationToken.txt or Cookie.txt not found."
-            )
+    Returns:
+        tuple: (RequestVerificationToken, Cookie) strings
+    """
+    print("Loading cookies and token from files...")
 
-        with open("RequestVerificationToken.txt", "r") as f:
-            RequestVerificationToken = f.read()
-            f.close()
+    if not os.path.exists(COOKIE_FILE):
+        print(f"Error: {COOKIE_FILE} not found.")
+        print("Please run 'python update_cookies.py' to log in and save cookies.")
+        return None, None
 
-        # Read Cookie from a file
-        with open("Cookie.txt", "r") as f:
-            Cookie = f.read()
-            f.close()
+    if not os.path.exists(TOKEN_FILE):
+        print(f"Error: {TOKEN_FILE} not found.")
+        print("Please run 'python update_cookies.py' to log in and save cookies.")
+        return None, None
 
-        print("RequestVerificationToken and Cookie read from file.")
+    with open(TOKEN_FILE, "r") as f:
+        token = f.read().strip()
 
-    except:
-        print(
-            "Unable to get RequestVerificationToken and Cookie from file. Will try to login manually."
-        )
-        RequestVerificationToken, Cookie = gui_login()
+    with open(COOKIE_FILE, "r") as f:
+        cookie = f.read().strip()
 
-        if RequestVerificationToken == None or Cookie == None:
-            print("Unable to login. Exiting.")
-            exit()
+    if not cookie:
+        print(f"Error: {COOKIE_FILE} is empty.")
+        print("Please run 'python update_cookies.py' to refresh your cookies.")
+        return None, None
 
-        else:
-            print(
-                "RequestVerificationToken and Cookie obtained successfully. Saving them to file for quicker future access."
-            )
-            with open("RequestVerificationToken.txt", "w") as f:
-                f.write(RequestVerificationToken)
-                f.close()
+    if not validate_cookies(cookie):
+        print("Error: Cookie.txt does not contain all required cookies.")
+        print("Please run 'python update_cookies.py' to refresh your cookies.")
+        return None, None
 
-            with open("Cookie.txt", "w") as f:
-                f.write(Cookie)
-                f.close()
-
-    return RequestVerificationToken, Cookie
+    print("Cookies and token loaded successfully.")
+    return token, cookie

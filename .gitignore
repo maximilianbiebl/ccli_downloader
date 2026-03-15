@@ -1,0 +1,22 @@
+# Cookie and token files (contain session data)
+Cookie.txt
+RequestVerificationToken.txt
+
+# Credentials file
+variables.py
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# macOS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+
+# Downloaded songs (optional, user-generated content)
+# songs/

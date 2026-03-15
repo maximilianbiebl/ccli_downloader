@@ -1,0 +1,155 @@
+"""Tests for the cookie-based login functionality."""
+
+import os
+import tempfile
+import unittest
+from unittest.mock import patch
+
+# Ensure imports work from the project root
+import sys
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+
+from get_cookies_and_token import get_cookie_and_token, validate_cookies
+from update_cookies import (
+    are_cookies_captured,
+    extract_required_cookies,
+    REQUIRED_COOKIES,
+    ANTIFORGERY_COOKIE_PREFIX,
+)
+
+
+class TestValidateCookies(unittest.TestCase):
+    """Tests for cookie validation logic."""
+
+    def test_valid_cookie_string(self):
+        cookie = "CCLI_JWT_AUTH=abc123; ARRAffinity=xyz; CCLI_AUTH=def"
+        self.assertTrue(validate_cookies(cookie))
+
+    def test_missing_jwt_auth(self):
+        cookie = "ARRAffinity=xyz; CCLI_AUTH=def"
+        self.assertFalse(validate_cookies(cookie))
+
+    def test_missing_arr_affinity(self):
+        cookie = "CCLI_JWT_AUTH=abc123; CCLI_AUTH=def"
+        self.assertFalse(validate_cookies(cookie))
+
+    def test_empty_string(self):
+        self.assertFalse(validate_cookies(""))
+
+
+class TestGetCookieAndToken(unittest.TestCase):
+    """Tests for loading cookies and token from files."""
+
+    def setUp(self):
+        self.test_dir = tempfile.mkdtemp()
+        self.orig_dir = os.getcwd()
+        os.chdir(self.test_dir)
+
+    def tearDown(self):
+        os.chdir(self.orig_dir)
+
+    def test_missing_cookie_file(self):
+        """Returns None when Cookie.txt doesn't exist."""
+        token, cookie = get_cookie_and_token()
+        self.assertIsNone(token)
+        self.assertIsNone(cookie)
+
+    def test_missing_token_file(self):
+        """Returns None when RequestVerificationToken.txt doesn't exist."""
+        with open("Cookie.txt", "w") as f:
+            f.write("CCLI_JWT_AUTH=abc; ARRAffinity=xyz")
+        token, cookie = get_cookie_and_token()
+        self.assertIsNone(token)
+        self.assertIsNone(cookie)
+
+    def test_empty_cookie_file(self):
+        """Returns None when Cookie.txt is empty."""
+        with open("Cookie.txt", "w") as f:
+            f.write("")
+        with open("RequestVerificationToken.txt", "w") as f:
+            f.write("test_token")
+        token, cookie = get_cookie_and_token()
+        self.assertIsNone(token)
+        self.assertIsNone(cookie)
+
+    def test_invalid_cookies(self):
+        """Returns None when Cookie.txt has invalid/incomplete cookies."""
+        with open("Cookie.txt", "w") as f:
+            f.write("some_random_cookie=value")
+        with open("RequestVerificationToken.txt", "w") as f:
+            f.write("test_token")
+        token, cookie = get_cookie_and_token()
+        self.assertIsNone(token)
+        self.assertIsNone(cookie)
+
+    def test_valid_files(self):
+        """Returns token and cookie when files are valid."""
+        cookie_str = "CCLI_JWT_AUTH=jwt_value; ARRAffinity=arr_value; CCLI_AUTH=auth_value"
+        with open("Cookie.txt", "w") as f:
+            f.write(cookie_str)
+        with open("RequestVerificationToken.txt", "w") as f:
+            f.write("my_token")
+        token, cookie = get_cookie_and_token()
+        self.assertEqual(token, "my_token")
+        self.assertEqual(cookie, cookie_str)
+
+
+class TestAreCookiesCaptured(unittest.TestCase):
+    """Tests for the are_cookies_captured function."""
+
+    def test_all_cookies_present(self):
+        cookies = [
+            {"name": "ARRAffinity", "value": "1"},
+            {"name": "ARRAffinitySameSite", "value": "2"},
+            {"name": "CCLI_AUTH", "value": "3"},
+            {"name": "CCLI_JWT_AUTH", "value": "4"},
+            {"name": ".AspNetCore.Session", "value": "5"},
+            {"name": ".AspNetCore.Antiforgery.abc", "value": "6"},
+        ]
+        self.assertTrue(are_cookies_captured(cookies))
+
+    def test_missing_required_cookie(self):
+        cookies = [
+            {"name": "ARRAffinity", "value": "1"},
+            {"name": "CCLI_AUTH", "value": "3"},
+            {"name": ".AspNetCore.Antiforgery.abc", "value": "6"},
+        ]
+        self.assertFalse(are_cookies_captured(cookies))
+
+    def test_missing_antiforgery(self):
+        cookies = [
+            {"name": "ARRAffinity", "value": "1"},
+            {"name": "ARRAffinitySameSite", "value": "2"},
+            {"name": "CCLI_AUTH", "value": "3"},
+            {"name": "CCLI_JWT_AUTH", "value": "4"},
+            {"name": ".AspNetCore.Session", "value": "5"},
+        ]
+        self.assertFalse(are_cookies_captured(cookies))
+
+    def test_empty_cookies(self):
+        self.assertFalse(are_cookies_captured([]))
+
+
+class TestExtractRequiredCookies(unittest.TestCase):
+    """Tests for extract_required_cookies function."""
+
+    def test_filters_required_cookies(self):
+        cookies = [
+            {"name": "ARRAffinity", "value": "1"},
+            {"name": "random_cookie", "value": "ignored"},
+            {"name": "CCLI_JWT_AUTH", "value": "4"},
+            {"name": ".AspNetCore.Antiforgery.abc", "value": "6"},
+        ]
+        result = extract_required_cookies(cookies)
+        self.assertEqual(result["ARRAffinity"], "1")
+        self.assertEqual(result["CCLI_JWT_AUTH"], "4")
+        self.assertEqual(result[".AspNetCore.Antiforgery.abc"], "6")
+        self.assertNotIn("random_cookie", result)
+
+    def test_empty_input(self):
+        result = extract_required_cookies([])
+        self.assertEqual(result, {})
+
+
+if __name__ == "__main__":
+    unittest.main()

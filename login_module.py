@@ -1,66 +1,65 @@
-import requests
 from selenium import webdriver
-from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from get_cookies_and_token import get_cookie_and_token
 
 
 def execute_login():
+    """
+    Launch a headless browser and set cookies from Cookie.txt.
+
+    Returns a Selenium WebDriver instance logged into SongSelect,
+    or None if login fails.
+    """
     driver = None
     try:
-        # Step 1: Get the token and cookie
-        print("Attempting to retrieve login token and cookies...")
-        RequestVerificationToken, Cookie = get_cookie_and_token()
+        # Step 1: Load cookies from file
+        print("Loading cookies from file...")
+        token, cookie = get_cookie_and_token()
 
-        if not Cookie:
-            print("Login failed. No valid Cookie received.")
-            return None  # Return None to indicate failure
+        if not cookie:
+            print("Login failed. No valid cookies found.")
+            print("Please run 'python update_cookies.py' to log in and save cookies.")
+            return None
 
-        print("Login successful. Proceeding to launch the browser...")
-
-        # Step 2: Launch the browser in headless mode
+        # Step 2: Launch headless browser
+        print("Launching headless browser...")
         options = webdriver.ChromeOptions()
-        options.add_argument("--headless")  # Run browser in headless mode
-        options.add_argument("--disable-gpu")  # Disable GPU (optional, improves stability)
-        options.add_argument("--no-sandbox")  # Required in some environments
-        options.add_argument("--window-size=1920,1080")  # Optional, set the browser window size
-        options.add_argument("--disable-dev-shm-usage")  # Overcome limited resource problems
+        options.add_argument("--headless")
+        options.add_argument("--disable-gpu")
+        options.add_argument("--no-sandbox")
+        options.add_argument("--window-size=1920,1080")
+        options.add_argument("--disable-dev-shm-usage")
         driver = webdriver.Chrome(options=options)
 
-        # Step 3: Navigate to the root domain
+        # Step 3: Navigate to root domain to set cookies
         print("Navigating to https://ccli.com...")
         driver.get("https://ccli.com")
 
-        # Step 4: Set cookies
-        print("Setting cookies for the session...")
-        cookies = Cookie.split("; ")  # Split cookie string into individual cookies
-        for cookie in cookies:
+        # Step 4: Set cookies from file
+        print("Setting session cookies...")
+        cookies = cookie.split("; ")
+        for c in cookies:
             try:
-                name, value = cookie.split("=", 1)
-                driver.add_cookie({"name": name, "value": value, "domain": ".ccli.com"})
+                name, value = c.strip(";").split("=", 1)
+                driver.add_cookie({"name": name.strip(), "value": value.strip(), "domain": ".ccli.com"})
             except ValueError:
-                print(f"Malformed cookie: {cookie}")
-            except Exception as cookie_error:
-                print(f"Error setting cookie: {cookie}. Error: {cookie_error}")
+                print(f"Skipping malformed cookie: {c}")
+            except Exception as e:
+                print(f"Error setting cookie '{c}': {e}")
 
         # Step 5: Navigate to SongSelect
         print("Navigating to https://songselect.ccli.com...")
         driver.get("https://songselect.ccli.com")
 
-        # Step 6: Verify login state
         WebDriverWait(driver, 10).until(EC.url_contains("songselect.ccli.com"))
-        print("SongSelect opened successfully and logged in!")
+        print("SongSelect opened successfully!")
 
-        # Return the driver for reuse in the search GUI
         return driver
 
-    except requests.RequestException as req_error:
-        print(f"Request error during login: {req_error}")
     except Exception as e:
-        print(f"An error occurred during execution: {e}")
-    finally:
-        if not driver:
-            print("Closing the browser due to error...")
-            if driver:
-                driver.quit()
+        print(f"An error occurred during login: {e}")
+        print("Your cookies may have expired. Run 'python update_cookies.py' to refresh.")
+        if driver:
+            driver.quit()
+        return None

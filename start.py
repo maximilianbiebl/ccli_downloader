@@ -1,15 +1,22 @@
 import os
 import subprocess
 
-VARIABLES_FILE = "variables.py"
+COOKIE_FILE = "Cookie.txt"
+
 
 def main():
-    if not os.path.exists(VARIABLES_FILE):
-        print("Variables file not found. Launching credentials setup...")
-        subprocess.run(["python", "create_credentials.py"])  # Launch credential creation GUI
-    else:
-        print("Variables file found. Proceeding to main script...")
-        subprocess.run(["python", "main.py"])  # Launch the main program
+    if not os.path.exists(COOKIE_FILE):
+        print("No cookies found. You need to log in first.")
+        print("Launching cookie update tool...")
+        subprocess.run(["python", "update_cookies.py"])
+
+        # After cookie update, check if cookies were saved successfully
+        if not os.path.exists(COOKIE_FILE):
+            print("Cookie update was not completed. Exiting.")
+            return
+
+    print("Cookies found. Starting main application...")
+    subprocess.run(["python", "main.py"])
 
 
 if __name__ == "__main__":
