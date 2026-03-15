@@ -68,10 +68,15 @@ The following cookies are extracted during login:
 | `login_module.py` | Sets saved cookies on undetected browser |
 | `get_cookies_and_token.py` | Loads cookies and token from files |
 | `update_cookies.py` | Cookie update tool - manual browser login |
+| `browser_utils.py` | Chrome version detection and browser creation helpers |
 | `search_save.py` | Song search and download GUI |
 | `cookie_extractor.py` | Legacy wrapper (delegates to update_cookies.py) |
 
 ## Troubleshooting
+
+### ChromeDriver version mismatch
+
+If you see an error like `This version of ChromeDriver only supports Chrome version X`, the tool will now auto-detect your installed Chrome version and download the matching ChromeDriver. Make sure Google Chrome is installed and up to date.
 
 ### Cloudflare Turnstile errors (Error 600010)
 

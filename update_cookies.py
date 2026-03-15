@@ -15,6 +15,8 @@ import undetected_chromedriver as uc
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
+from browser_utils import create_chrome
+
 COOKIE_FILE = "Cookie.txt"
 TOKEN_FILE = "RequestVerificationToken.txt"
 
@@ -109,7 +111,7 @@ def run_cookie_update():
         options.add_argument("--window-size=1920,1080")
         options.add_argument("--disable-dev-shm-usage")
 
-        driver = uc.Chrome(options=options)
+        driver = create_chrome(options=options)
         driver.get(LOGIN_URL)
 
         print("Waiting for login to complete...")
@@ -154,6 +156,9 @@ def run_cookie_update():
         if "timeout" in error_msg.lower() or "TimeoutException" in error_msg:
             print(f"Error: Login timed out after {LOGIN_TIMEOUT} seconds.")
             print("Please try again and complete the login within the time limit.")
+        elif "version" in error_msg.lower() and "chrome" in error_msg.lower():
+            print(f"Error: ChromeDriver/Chrome version mismatch - {e}")
+            print("Please update Google Chrome to the latest version and try again.")
         elif "WebDriverException" in error_msg or "chrome" in error_msg.lower():
             print(f"Error: Browser issue - {e}")
             print("Make sure Google Chrome is installed and up to date.")

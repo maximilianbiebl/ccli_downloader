@@ -3,7 +3,7 @@
 import os
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 
 # Ensure imports work from the project root
 import sys
@@ -17,6 +17,7 @@ from update_cookies import (
     ANTIFORGERY_COOKIE_PREFIX,
     CLOUDFLARE_COOKIES,
 )
+from browser_utils import detect_chrome_version
 
 
 class TestValidateCookies(unittest.TestCase):
@@ -200,6 +201,47 @@ class TestCloudflareConstants(unittest.TestCase):
 
     def test_cloudflare_cookies_defined(self):
         self.assertIn("cf_clearance", CLOUDFLARE_COOKIES)
+
+
+class TestDetectChromeVersion(unittest.TestCase):
+    """Tests for Chrome version detection."""
+
+    @patch("browser_utils.subprocess.check_output")
+    def test_detects_version_from_output(self, mock_check):
+        """Parses major version from chrome --version output."""
+        mock_check.return_value = "Google Chrome 145.0.7632.160\n"
+        version = detect_chrome_version()
+        self.assertEqual(version, 145)
+
+    @patch("browser_utils.subprocess.check_output")
+    def test_detects_chromium_version(self, mock_check):
+        """Parses major version from Chromium output."""
+        mock_check.return_value = "Chromium 120.0.6099.71\n"
+        version = detect_chrome_version()
+        self.assertEqual(version, 120)
+
+    @patch("browser_utils.subprocess.check_output", side_effect=FileNotFoundError)
+    def test_returns_none_when_chrome_not_found(self, mock_check):
+        """Returns None when no Chrome binary is found."""
+        version = detect_chrome_version()
+        self.assertIsNone(version)
+
+    @patch("browser_utils.subprocess.check_output")
+    def test_handles_unexpected_output(self, mock_check):
+        """Returns None when output doesn't match version pattern."""
+        mock_check.return_value = "some unexpected output"
+        version = detect_chrome_version()
+        self.assertIsNone(version)
+
+    @patch("browser_utils.subprocess.check_output")
+    def test_windows_registry_output(self, mock_check):
+        """Parses version from Windows registry query output."""
+        mock_check.return_value = (
+            "HKEY_CURRENT_USER\\Software\\Google\\Chrome\\BLBeacon\n"
+            "    version    REG_SZ    146.0.7890.100\n"
+        )
+        version = detect_chrome_version()
+        self.assertEqual(version, 146)
 
 
 if __name__ == "__main__":

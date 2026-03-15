@@ -2,6 +2,7 @@ import undetected_chromedriver as uc
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from get_cookies_and_token import get_cookie_and_token
+from browser_utils import create_chrome
 
 
 def execute_login():
@@ -31,7 +32,7 @@ def execute_login():
         options.add_argument("--no-sandbox")
         options.add_argument("--window-size=1920,1080")
         options.add_argument("--disable-dev-shm-usage")
-        driver = uc.Chrome(options=options, headless=True)
+        driver = create_chrome(options=options, headless=True)
 
         # Step 3: Navigate to root domain to set cookies
         print("Navigating to https://ccli.com...")
