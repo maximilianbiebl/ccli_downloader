@@ -147,11 +147,11 @@ class SongSelectApp:
         """Update the login status indicator."""
         if self.driver:
             self.login_status_label.config(
-                text="Status: Logged in \u2713", fg="green"
+                text="Status: Logged in [OK]", fg="green"
             )
         else:
             self.login_status_label.config(
-                text="Status: Not logged in \u2717", fg="red"
+                text="Status: Not logged in [X]", fg="red"
             )
 
     def do_login(self):
@@ -159,7 +159,7 @@ class SongSelectApp:
         from update_cookies import run_cookie_update
         from login_module import execute_login
 
-        self.login_status_label.config(text="Status: Logging in\u2026", fg="orange")
+        self.login_status_label.config(text="Status: Logging in...", fg="orange")
         self.root.update()
 
         success = run_cookie_update()
