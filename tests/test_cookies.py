@@ -566,5 +566,121 @@ class TestFindSongContainers(unittest.TestCase):
         self.assertEqual(result, [])
 
 
+class TestElementHasContent(unittest.TestCase):
+    """Tests for scraping_helpers._element_has_content."""
+
+    def setUp(self):
+        from scraping_helpers import _element_has_content
+        self.has_content = _element_has_content
+
+    def test_true_when_text_present(self):
+        el = MagicMock()
+        el.text = "Amazing Grace"
+        self.assertTrue(self.has_content(el))
+
+    def test_true_when_textContent_present(self):
+        el = MagicMock()
+        el.text = ""
+        el.get_attribute.return_value = "Hidden Content"
+        self.assertTrue(self.has_content(el))
+
+    def test_true_when_child_a_has_href(self):
+        child_a = MagicMock()
+        child_a.get_attribute.return_value = "https://example.com/song/1"
+
+        el = MagicMock()
+        el.text = ""
+        el.get_attribute.return_value = ""
+        el.find_element.return_value = child_a
+        self.assertTrue(self.has_content(el))
+
+    def test_false_when_empty(self):
+        el = MagicMock()
+        el.text = ""
+        el.get_attribute.return_value = ""
+        el.find_element.side_effect = Exception("no a tag")
+        self.assertFalse(self.has_content(el))
+
+    def test_false_when_whitespace_only(self):
+        el = MagicMock()
+        el.text = "   "
+        el.get_attribute.return_value = "   "
+        el.find_element.side_effect = Exception("no a tag")
+        self.assertFalse(self.has_content(el))
+
+
+class TestSongResultsPopulated(unittest.TestCase):
+    """Tests for scraping_helpers.song_results_populated (WebDriverWait condition)."""
+
+    def setUp(self):
+        from scraping_helpers import song_results_populated
+        self.populated = song_results_populated
+
+    def test_returns_elements_when_populated(self):
+        """Returns list of elements when first container has content."""
+        mock_el = MagicMock()
+        mock_el.text = "Way Maker by Sinach"
+
+        driver = MagicMock()
+        driver.find_elements.side_effect = lambda by, cls: (
+            [mock_el] if cls == "song-result" else []
+        )
+        result = self.populated(driver)
+        self.assertEqual(result, [mock_el])
+
+    def test_returns_false_when_containers_empty(self):
+        """Returns False when containers exist but have no content."""
+        mock_el = MagicMock()
+        mock_el.text = ""
+        mock_el.get_attribute.return_value = ""
+        mock_el.find_element.side_effect = Exception("no a tag")
+
+        driver = MagicMock()
+        driver.find_elements.side_effect = lambda by, cls: (
+            [mock_el] if cls == "song-item" else []
+        )
+        result = self.populated(driver)
+        self.assertFalse(result)
+
+    def test_returns_false_when_no_containers(self):
+        """Returns False when no containers exist at all."""
+        driver = MagicMock()
+        driver.find_elements.return_value = []
+        result = self.populated(driver)
+        self.assertFalse(result)
+
+    def test_falls_back_to_second_class_when_first_empty(self):
+        """Falls back to song-item class when song-result containers are empty."""
+        empty_el = MagicMock()
+        empty_el.text = ""
+        empty_el.get_attribute.return_value = ""
+        empty_el.find_element.side_effect = Exception("no a tag")
+
+        populated_el = MagicMock()
+        populated_el.text = "10,000 Reasons"
+
+        driver = MagicMock()
+        driver.find_elements.side_effect = lambda by, cls: (
+            [empty_el] if cls == "song-result"
+            else [populated_el] if cls == "song-item"
+            else []
+        )
+        result = self.populated(driver)
+        self.assertEqual(result, [populated_el])
+
+    def test_uses_textContent_fallback(self):
+        """Detects content via textContent when .text is empty."""
+        mock_el = MagicMock()
+        mock_el.text = ""
+        mock_el.get_attribute.return_value = "Way Maker"
+
+        driver = MagicMock()
+        driver.find_elements.side_effect = lambda by, cls: (
+            [mock_el] if cls == "song-result" else []
+        )
+        result = self.populated(driver)
+        self.assertEqual(result, [mock_el])
+
+
 if __name__ == "__main__":
     unittest.main()

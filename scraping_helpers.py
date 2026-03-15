@@ -89,3 +89,38 @@ def find_song_containers(driver):
             print(f"Found {len(songs)} results using container class '{cls}'")
             return songs
     return []
+
+
+def _element_has_content(element):
+    """Check whether a single WebElement has meaningful inner content.
+
+    Returns True if the element contains visible text, textContent, or a
+    child ``<a>`` tag with an ``href``.
+    """
+    if (element.text or "").strip():
+        return True
+    if (element.get_attribute("textContent") or "").strip():
+        return True
+    try:
+        a_tag = element.find_element(By.TAG_NAME, "a")
+        if a_tag.get_attribute("href"):
+            return True
+    except Exception:
+        pass
+    return False
+
+
+def song_results_populated(driver):
+    """Custom Selenium wait condition: song containers exist **and** have content.
+
+    Designed for use with ``WebDriverWait(...).until(song_results_populated)``.
+
+    Returns:
+        A list of populated WebElements when ready, or *False* so that
+        ``WebDriverWait`` keeps polling.
+    """
+    for cls in SONG_CONTAINER_CLASSES:
+        songs = driver.find_elements(By.CLASS_NAME, cls)
+        if songs and _element_has_content(songs[0]):
+            return songs
+    return False

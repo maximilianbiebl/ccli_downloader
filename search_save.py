@@ -16,6 +16,7 @@ from scraping_helpers import (
     try_extract_text,
     try_extract_link,
     find_song_containers,
+    song_results_populated,
 )
 
 SONGSELECT_URL = "https://songselect.ccli.com"
@@ -272,12 +273,9 @@ class SongSelectApp:
 
             print("Waiting for search results to load...")
 
-            # Wait for search results — try multiple container class names
-            WebDriverWait(self.driver, 20).until(
-                EC.presence_of_all_elements_located(
-                    (By.CSS_SELECTOR, SONG_CONTAINER_CSS)
-                )
-            )
+            # Wait for search results to be present AND have rendered content
+            # (the SPA may insert empty containers before populating them)
+            WebDriverWait(self.driver, 20).until(song_results_populated)
             print("Search results loaded successfully!")
             self.display_search_results()
         except Exception as e:
