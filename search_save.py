@@ -5,7 +5,6 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 import time
 import os
-import urllib.parse
 
 from settings import load_settings, save_settings as persist_settings
 from lyrics_processing import process_lyrics_file, rename_with_line_count
@@ -293,13 +292,16 @@ class SongSelectApp:
 
             print(f"Initiating search for: {query}")
 
-            # Navigate directly to the search results page (faster than
-            # loading homepage → typing → pressing Enter)
-            search_url = (
-                f"{SONGSELECT_URL}/search/lyrics/"
-                f"{urllib.parse.quote(query)}"
+            # Navigate to the search page for a clean state
+            self.driver.get(SONGSELECT_URL)
+
+            # Locate the search bar and enter the query
+            search_input = WebDriverWait(self.driver, 20).until(
+                EC.presence_of_element_located((By.ID, "SearchTextInput-1"))
             )
-            self.driver.get(search_url)
+            search_input.clear()
+            search_input.send_keys(query)
+            search_input.send_keys("\n")
 
             print("Waiting for search results to load...")
 
