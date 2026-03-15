@@ -22,7 +22,7 @@ from update_cookies import (
 )
 from browser_utils import detect_chrome_version
 from settings import load_settings, save_settings, DEFAULT_SETTINGS
-from lyrics_processing import process_lyrics_file, rename_with_line_count
+from lyrics_processing import process_lyrics_file, rename_with_line_count, is_section_label, merge_section_labels, merge_section_labels_file
 
 
 class TestValidateCookies(unittest.TestCase):
@@ -503,6 +503,147 @@ class TestRenameWithLineCount(unittest.TestCase):
         with open(new_path, "r") as f:
             content = f.read()
         self.assertEqual(content, "hello\nworld")
+
+
+class TestIsSectionLabel(unittest.TestCase):
+    """Tests for lyrics_processing.is_section_label."""
+
+    def test_verse(self):
+        self.assertTrue(is_section_label("Verse 1"))
+
+    def test_chorus(self):
+        self.assertTrue(is_section_label("Chorus"))
+
+    def test_bridge(self):
+        self.assertTrue(is_section_label("Bridge"))
+
+    def test_pre_chorus_with_number(self):
+        self.assertTrue(is_section_label("Pre-Chorus 2"))
+
+    def test_case_insensitive(self):
+        self.assertTrue(is_section_label("verse 1"))
+        self.assertTrue(is_section_label("CHORUS"))
+
+    def test_tag(self):
+        self.assertTrue(is_section_label("Tag"))
+
+    def test_ending(self):
+        self.assertTrue(is_section_label("Ending"))
+
+    def test_intro(self):
+        self.assertTrue(is_section_label("Intro"))
+
+    def test_interlude(self):
+        self.assertTrue(is_section_label("Interlude"))
+
+    def test_outro(self):
+        self.assertTrue(is_section_label("Outro"))
+
+    def test_misc(self):
+        self.assertTrue(is_section_label("Misc 1"))
+
+    def test_regular_lyrics_not_label(self):
+        self.assertFalse(is_section_label("I lay my life down"))
+
+    def test_empty_string_not_label(self):
+        self.assertFalse(is_section_label(""))
+
+    def test_already_bracketed_not_label(self):
+        self.assertFalse(is_section_label("[Verse 1]"))
+
+    def test_whitespace_stripped(self):
+        self.assertTrue(is_section_label("  Verse 1  "))
+
+
+class TestMergeSectionLabels(unittest.TestCase):
+    """Tests for lyrics_processing.merge_section_labels."""
+
+    def test_basic_merge(self):
+        text = "Verse 1\nI lay my life down"
+        result = merge_section_labels(text)
+        self.assertEqual(result, "[Verse 1] I lay my life down")
+
+    def test_multiple_sections(self):
+        text = "Verse 1\nLine A\nLine B\nChorus\nLine C"
+        result = merge_section_labels(text)
+        lines = result.splitlines()
+        self.assertEqual(lines[0], "[Verse 1] Line A")
+        self.assertEqual(lines[1], "Line B")
+        self.assertEqual(lines[2], "[Chorus] Line C")
+
+    def test_empty_lines_between_label_and_content(self):
+        text = "Verse 1\n\nI lay my life down"
+        result = merge_section_labels(text)
+        self.assertEqual(result, "[Verse 1] I lay my life down")
+
+    def test_label_at_end_of_file(self):
+        text = "Line A\nVerse 2"
+        result = merge_section_labels(text)
+        lines = result.splitlines()
+        self.assertEqual(lines[0], "Line A")
+        self.assertEqual(lines[1], "[Verse 2]")
+
+    def test_no_labels(self):
+        text = "Line A\nLine B\nLine C"
+        result = merge_section_labels(text)
+        self.assertEqual(result, text)
+
+    def test_full_song_format(self):
+        """Full example matching the problem statement format."""
+        text = (
+            "Verse 1\n"
+            "I lay my life down at Your feet\n"
+            "You're the only One I need\n"
+            "\n"
+            "Chorus\n"
+            "One way Jesus\n"
+            "You're the only One that I could live for\n"
+            "\n"
+            "Verse 2\n"
+            "You are always\n"
+            "Always there"
+        )
+        result = merge_section_labels(text)
+        lines = result.splitlines()
+        self.assertEqual(lines[0], "[Verse 1] I lay my life down at Your feet")
+        self.assertEqual(lines[1], "You're the only One I need")
+        self.assertEqual(lines[2], "")
+        self.assertEqual(lines[3], "[Chorus] One way Jesus")
+        self.assertEqual(lines[4], "You're the only One that I could live for")
+        self.assertEqual(lines[5], "")
+        self.assertEqual(lines[6], "[Verse 2] You are always")
+        self.assertEqual(lines[7], "Always there")
+
+
+class TestMergeSectionLabelsFile(unittest.TestCase):
+    """Tests for lyrics_processing.merge_section_labels_file."""
+
+    def setUp(self):
+        self.test_dir = tempfile.mkdtemp()
+
+    def test_merges_labels_in_file(self):
+        filepath = os.path.join(self.test_dir, "song.txt")
+        with open(filepath, "w") as f:
+            f.write("Verse 1\nI lay my life down\nChorus\nOne way")
+
+        merge_section_labels_file(filepath)
+
+        with open(filepath, "r") as f:
+            lines = f.read().splitlines()
+
+        self.assertEqual(lines[0], "[Verse 1] I lay my life down")
+        self.assertEqual(lines[1], "[Chorus] One way")
+
+    def test_no_labels_unchanged(self):
+        filepath = os.path.join(self.test_dir, "song.txt")
+        with open(filepath, "w") as f:
+            f.write("Line A\nLine B")
+
+        merge_section_labels_file(filepath)
+
+        with open(filepath, "r") as f:
+            content = f.read()
+        self.assertEqual(content, "Line A\nLine B")
 
 
 class TestTryExtractText(unittest.TestCase):

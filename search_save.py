@@ -7,7 +7,7 @@ import time
 import os
 
 from settings import load_settings, save_settings as persist_settings
-from lyrics_processing import process_lyrics_file, rename_with_line_count
+from lyrics_processing import process_lyrics_file, rename_with_line_count, merge_section_labels_file
 from scraping_helpers import (
     SONG_CONTAINER_CLASSES,
     SONG_CONTAINER_CSS,
@@ -422,6 +422,7 @@ class SongSelectApp:
             for new_file in new_files:
                 if new_file.endswith(".txt"):
                     filepath = os.path.join(output_folder, new_file)
+                    merge_section_labels_file(filepath)
                     process_lyrics_file(
                         filepath, effective_separator, lines_per_slide
                     )

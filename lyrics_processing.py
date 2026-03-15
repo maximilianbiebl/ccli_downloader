@@ -5,6 +5,89 @@ for use with presentation software.
 """
 
 import os
+import re
+
+# Pattern matching common CCLI SongSelect section labels.
+# Matches lines like "Verse 1", "Chorus", "Pre-Chorus 2", "Bridge", etc.
+_SECTION_LABEL_RE = re.compile(
+    r"^(Verse|Chorus|Bridge|Pre-Chorus|Tag|Ending|Intro|Interlude|Outro|Misc)"
+    r"(\s+\d+)?$",
+    re.IGNORECASE,
+)
+
+
+def is_section_label(line):
+    """Return *True* if *line* looks like a CCLI section label.
+
+    Examples: ``Verse 1``, ``Chorus``, ``Pre-Chorus 2``, ``Bridge``.
+    """
+    return bool(_SECTION_LABEL_RE.match(line.strip()))
+
+
+def merge_section_labels(text):
+    """Wrap section labels in brackets and merge them with the next content line.
+
+    Transforms standalone section labels (e.g. ``Verse 1``) so that they
+    appear on the same line as the first lyrics line that follows, wrapped
+    in square brackets::
+
+        Verse 1                  →  [Verse 1] I lay my life down
+        I lay my life down
+
+    This format is required by presentation software such as FreeShow.
+
+    Parameters
+    ----------
+    text : str
+        The raw lyrics content.
+
+    Returns
+    -------
+    str
+        The transformed lyrics content.
+    """
+    lines = text.splitlines()
+    merged = []
+    i = 0
+    while i < len(lines):
+        stripped = lines[i].strip()
+        if is_section_label(stripped):
+            label = f"[{stripped}]"
+            # Look ahead for the next non-empty line to merge with
+            i += 1
+            while i < len(lines) and not lines[i].strip():
+                i += 1
+            if i < len(lines):
+                merged.append(f"{label} {lines[i]}")
+            else:
+                # Label at end of file with no following content
+                merged.append(label)
+        else:
+            merged.append(lines[i])
+        i += 1
+    return "\n".join(merged)
+
+
+def merge_section_labels_file(filepath):
+    """Apply :func:`merge_section_labels` to a file in-place.
+
+    Parameters
+    ----------
+    filepath : str
+        Path to the lyrics text file.
+    """
+    try:
+        with open(filepath, "r", encoding="utf-8") as f:
+            content = f.read()
+
+        merged = merge_section_labels(content)
+
+        with open(filepath, "w", encoding="utf-8") as f:
+            f.write(merged)
+
+        print(f"Merged section labels in {os.path.basename(filepath)}")
+    except Exception as e:
+        print(f"Error merging section labels: {e}")
 
 
 def process_lyrics_file(filepath, separator="//", lines_per_slide=2):
