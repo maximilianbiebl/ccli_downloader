@@ -64,6 +64,8 @@ def get_verification_token(cookies):
         response = requests.get(url, headers=headers, cookies=cookies)
         if response.status_code == 200:
             return response.text.strip('"')
+    except requests.ConnectionError:
+        print("Error: Could not connect to CCLI server. Check your internet connection.")
     except Exception as e:
         print(f"Error fetching verification token: {e}")
     return None
@@ -141,7 +143,15 @@ def run_cookie_update():
         return True
 
     except Exception as e:
-        print(f"Error during cookie update: {e}")
+        error_msg = str(e)
+        if "timeout" in error_msg.lower() or "TimeoutException" in error_msg:
+            print(f"Error: Login timed out after {LOGIN_TIMEOUT} seconds.")
+            print("Please try again and complete the login within the time limit.")
+        elif "WebDriverException" in error_msg or "chrome" in error_msg.lower():
+            print(f"Error: Browser issue - {e}")
+            print("Make sure Google Chrome is installed and up to date.")
+        else:
+            print(f"Error during cookie update: {e}")
         return False
     finally:
         if driver:

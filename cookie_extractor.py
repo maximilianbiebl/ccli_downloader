@@ -5,14 +5,7 @@ This module is now superseded by update_cookies.py.
 It is kept for backward compatibility but delegates to update_cookies.
 """
 
-from update_cookies import (
-    run_cookie_update,
-    extract_required_cookies,
-    are_cookies_captured,
-    get_verification_token,
-    REQUIRED_COOKIES,
-    ANTIFORGERY_COOKIE_PREFIX,
-)
+from update_cookies import run_cookie_update
 
 
 def gui_login():

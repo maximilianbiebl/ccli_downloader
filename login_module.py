@@ -41,8 +41,11 @@ def execute_login():
         cookies = cookie.split("; ")
         for c in cookies:
             try:
-                name, value = c.strip(";").split("=", 1)
-                driver.add_cookie({"name": name.strip(), "value": value.strip(), "domain": ".ccli.com"})
+                c = c.strip()
+                if c.endswith(";"):
+                    c = c[:-1]
+                name, value = c.split("=", 1)
+                driver.add_cookie({"name": name, "value": value, "domain": ".ccli.com"})
             except ValueError:
                 print(f"Skipping malformed cookie: {c}")
             except Exception as e:
