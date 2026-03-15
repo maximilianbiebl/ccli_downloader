@@ -426,5 +426,145 @@ class TestProcessLyrics(unittest.TestCase):
         self.assertEqual(content, "A\nB")
 
 
+class TestTryExtractText(unittest.TestCase):
+    """Tests for scraping_helpers.try_extract_text."""
+
+    def setUp(self):
+        from scraping_helpers import try_extract_text
+        self.extract = try_extract_text
+
+    def test_returns_text_from_first_matching_selector(self):
+        """Returns text when the first selector matches."""
+        mock_el = MagicMock()
+        mock_el.text = "Amazing Grace"
+        parent = MagicMock()
+        parent.find_element.return_value = mock_el
+
+        selectors = [("by_class", "title")]
+        result = self.extract(parent, selectors)
+        self.assertEqual(result, "Amazing Grace")
+
+    def test_falls_back_to_textContent_when_text_empty(self):
+        """Falls back to textContent when .text is empty."""
+        mock_el = MagicMock()
+        mock_el.text = ""
+        mock_el.get_attribute.return_value = "Hidden Title"
+        parent = MagicMock()
+        parent.find_element.return_value = mock_el
+
+        selectors = [("by_class", "title")]
+        result = self.extract(parent, selectors)
+        self.assertEqual(result, "Hidden Title")
+
+    def test_tries_next_selector_on_exception(self):
+        """Skips selectors that raise exceptions."""
+        good_el = MagicMock()
+        good_el.text = "Found It"
+
+        parent = MagicMock()
+        parent.find_element.side_effect = [Exception("not found"), good_el]
+
+        selectors = [("by_class", "bad"), ("by_class", "good")]
+        result = self.extract(parent, selectors)
+        self.assertEqual(result, "Found It")
+
+    def test_returns_empty_when_all_fail(self):
+        """Returns empty string when no selector works."""
+        parent = MagicMock()
+        parent.find_element.side_effect = Exception("not found")
+
+        selectors = [("by_class", "title"), ("by_class", "name")]
+        result = self.extract(parent, selectors)
+        self.assertEqual(result, "")
+
+    def test_skips_empty_text_tries_next(self):
+        """Skips selectors that return empty text and textContent."""
+        empty_el = MagicMock()
+        empty_el.text = ""
+        empty_el.get_attribute.return_value = ""
+
+        good_el = MagicMock()
+        good_el.text = "Song Title"
+
+        parent = MagicMock()
+        parent.find_element.side_effect = [empty_el, good_el]
+
+        selectors = [("by_class", "empty"), ("by_class", "title")]
+        result = self.extract(parent, selectors)
+        self.assertEqual(result, "Song Title")
+
+
+class TestTryExtractLink(unittest.TestCase):
+    """Tests for scraping_helpers.try_extract_link."""
+
+    def setUp(self):
+        from scraping_helpers import try_extract_link
+        self.extract_link = try_extract_link
+
+    def test_returns_href_from_element(self):
+        """Returns href directly from element."""
+        el = MagicMock()
+        el.get_attribute.return_value = "https://songselect.ccli.com/Songs/123"
+        self.assertEqual(
+            self.extract_link(el), "https://songselect.ccli.com/Songs/123"
+        )
+
+    def test_falls_back_to_child_a_tag(self):
+        """Falls back to child <a> tag when element has no href."""
+        child_a = MagicMock()
+        child_a.get_attribute.return_value = "https://songselect.ccli.com/Songs/456"
+
+        el = MagicMock()
+        el.get_attribute.return_value = None
+        el.find_element.return_value = child_a
+
+        self.assertEqual(
+            self.extract_link(el), "https://songselect.ccli.com/Songs/456"
+        )
+
+    def test_returns_none_when_no_link(self):
+        """Returns None when no link can be found."""
+        el = MagicMock()
+        el.get_attribute.return_value = None
+        el.find_element.side_effect = Exception("no a tag")
+
+        self.assertIsNone(self.extract_link(el))
+
+
+class TestFindSongContainers(unittest.TestCase):
+    """Tests for scraping_helpers.find_song_containers."""
+
+    def setUp(self):
+        from scraping_helpers import find_song_containers
+        self.find = find_song_containers
+
+    def test_finds_song_result_first(self):
+        """Prefers 'song-result' class over 'song-item'."""
+        mock_el = MagicMock()
+        driver = MagicMock()
+        driver.find_elements.side_effect = lambda by, cls: (
+            [mock_el] if cls == "song-result" else []
+        )
+        result = self.find(driver)
+        self.assertEqual(result, [mock_el])
+
+    def test_falls_back_to_song_item(self):
+        """Falls back to 'song-item' when 'song-result' not found."""
+        mock_el = MagicMock()
+        driver = MagicMock()
+        driver.find_elements.side_effect = lambda by, cls: (
+            [mock_el] if cls == "song-item" else []
+        )
+        result = self.find(driver)
+        self.assertEqual(result, [mock_el])
+
+    def test_returns_empty_when_nothing_found(self):
+        """Returns empty list when no containers found."""
+        driver = MagicMock()
+        driver.find_elements.return_value = []
+        result = self.find(driver)
+        self.assertEqual(result, [])
+
+
 if __name__ == "__main__":
     unittest.main()

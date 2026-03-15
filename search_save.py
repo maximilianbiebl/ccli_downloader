@@ -8,6 +8,14 @@ import os
 
 from settings import load_settings, save_settings as persist_settings
 from lyrics_processing import process_lyrics_file
+from scraping_helpers import (
+    SONG_CONTAINER_CLASSES,
+    TITLE_SELECTORS,
+    AUTHOR_SELECTORS,
+    try_extract_text,
+    try_extract_link,
+    find_song_containers,
+)
 
 SONGSELECT_URL = "https://songselect.ccli.com"
 
@@ -263,9 +271,14 @@ class SongSelectApp:
 
             print("Waiting for search results to load...")
 
-            # Wait for search results to appear
+            # Wait for search results — try multiple container class names
+            container_selector = ", ".join(
+                f".{cls}" for cls in SONG_CONTAINER_CLASSES
+            )
             WebDriverWait(self.driver, 20).until(
-                EC.presence_of_all_elements_located((By.CLASS_NAME, "song-item"))
+                EC.presence_of_all_elements_located(
+                    (By.CSS_SELECTOR, container_selector)
+                )
             )
             print("Search results loaded successfully!")
             self.display_search_results()
@@ -285,17 +298,43 @@ class SongSelectApp:
 
     def display_search_results(self):
         try:
-            songs = self.driver.find_elements(By.CLASS_NAME, "song-item")
+            songs = find_song_containers(self.driver)
             self.results_listbox.delete(0, tk.END)
             self.song_links.clear()
 
+            if not songs:
+                print("No song containers found on the page.")
+                return
+
+            # Log the first element's outer HTML for diagnostics
+            try:
+                first_html = songs[0].get_attribute("outerHTML")
+                print(f"First song element HTML:\n{first_html[:500]}")
+            except Exception:
+                pass
+
             for song in songs:
                 try:
-                    title = song.find_element(By.CLASS_NAME, "title").text
-                    authors = song.find_element(By.CLASS_NAME, "authors").text
-                    link = song.get_attribute("href")
-                    self.results_listbox.insert(tk.END, f"{title} by {authors}")
-                    self.song_links.append(link)
+                    title = try_extract_text(song, TITLE_SELECTORS)
+                    authors = try_extract_text(song, AUTHOR_SELECTORS)
+
+                    # Last-resort fallback: parse the whole element text
+                    if not title and not authors:
+                        full_text = (
+                            song.get_attribute("textContent") or song.text or ""
+                        ).strip()
+                        if full_text:
+                            # Show the raw text so the user at least sees something
+                            title = " ".join(full_text.split())
+
+                    link = try_extract_link(song)
+
+                    display = f"{title} by {authors}" if authors else title
+                    if display.strip():
+                        self.results_listbox.insert(tk.END, display)
+                        self.song_links.append(link)
+                    else:
+                        print(f"Skipped empty song element: {song.tag_name}")
                 except Exception as e:
                     print(f"Error parsing song element: {e}")
         except Exception as e:
