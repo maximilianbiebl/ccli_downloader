@@ -10,6 +10,8 @@ Usage:
     python update_cookies.py
 """
 
+import time
+
 import requests
 import undetected_chromedriver as uc
 from selenium.webdriver.support.ui import WebDriverWait
@@ -20,11 +22,16 @@ from browser_utils import create_chrome
 COOKIE_FILE = "Cookie.txt"
 TOKEN_FILE = "RequestVerificationToken.txt"
 
-REQUIRED_COOKIES = [
-    "ARRAffinity",
-    "ARRAffinitySameSite",
-    "CCLI_AUTH",
+# Essential cookies - login fails without these
+ESSENTIAL_COOKIES = [
     "CCLI_JWT_AUTH",
+    "ARRAffinity",
+]
+
+# Optional cookies - captured when present but login can proceed without them
+OPTIONAL_COOKIES = [
+    "CCLI_AUTH",
+    "ARRAffinitySameSite",
     ".AspNetCore.Session",
 ]
 ANTIFORGERY_COOKIE_PREFIX = ".AspNetCore.Antiforgery"
@@ -32,28 +39,33 @@ ANTIFORGERY_COOKIE_PREFIX = ".AspNetCore.Antiforgery"
 # Cloudflare cookie - captured if present but not strictly required
 CLOUDFLARE_COOKIES = ["cf_clearance"]
 
+# All known cookie names for extraction (essential + optional)
+ALL_KNOWN_COOKIES = ESSENTIAL_COOKIES + OPTIONAL_COOKIES
+
 LOGIN_URL = "https://reporting.ccli.com/search"
 LOGIN_TIMEOUT = 300  # seconds to wait for manual login
 
 
 def are_cookies_captured(cookies):
-    """Check if all required cookies have been captured."""
+    """Check if essential cookies have been captured.
+
+    Only the cookies needed for downstream authentication are required.
+    Optional cookies are captured when present but are not mandatory.
+    """
     cookie_names = [c["name"] for c in cookies]
-    for req in REQUIRED_COOKIES:
+    for req in ESSENTIAL_COOKIES:
         if req not in cookie_names:
             return False
-    if not any(c["name"].startswith(ANTIFORGERY_COOKIE_PREFIX) for c in cookies):
-        return False
     return True
 
 
 def extract_required_cookies(cookies):
-    """Extract only the required cookies from the full cookie list."""
+    """Extract known CCLI cookies from the full cookie list."""
     cookies_dict = {}
     for c in cookies:
         name = c["name"]
         value = c["value"]
-        if (name in REQUIRED_COOKIES
+        if (name in ALL_KNOWN_COOKIES
                 or name.startswith(ANTIFORGERY_COOKIE_PREFIX)
                 or name in CLOUDFLARE_COOKIES):
             cookies_dict[name] = value
@@ -122,13 +134,26 @@ def run_cookie_update():
         )
         print("Login detected!")
 
+        # Brief delay to let cookies fully propagate after redirect
+        time.sleep(3)
+
         # Capture all cookies
         cookies = driver.get_cookies()
 
+        # Show diagnostic info about captured cookies
+        cookie_names = [c["name"] for c in cookies]
+        print(f"Captured {len(cookies)} cookies: {', '.join(cookie_names)}")
+
         if not are_cookies_captured(cookies):
-            print("Warning: Not all required cookies were captured.")
+            missing = [c for c in ESSENTIAL_COOKIES if c not in cookie_names]
+            print(f"Error: Essential cookies missing: {', '.join(missing)}")
             print("The login may not have completed successfully.")
             return False
+
+        # Report any missing optional cookies
+        missing_optional = [c for c in OPTIONAL_COOKIES if c not in cookie_names]
+        if missing_optional:
+            print(f"Note: Optional cookies not found: {', '.join(missing_optional)}")
 
         filtered_cookies = extract_required_cookies(cookies)
 

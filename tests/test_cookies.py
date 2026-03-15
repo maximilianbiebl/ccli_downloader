@@ -13,7 +13,9 @@ from get_cookies_and_token import get_cookie_and_token, validate_cookies
 from update_cookies import (
     are_cookies_captured,
     extract_required_cookies,
-    REQUIRED_COOKIES,
+    ESSENTIAL_COOKIES,
+    OPTIONAL_COOKIES,
+    ALL_KNOWN_COOKIES,
     ANTIFORGERY_COOKIE_PREFIX,
     CLOUDFLARE_COOKIES,
 )
@@ -130,7 +132,16 @@ class TestAreCookiesCaptured(unittest.TestCase):
         ]
         self.assertTrue(are_cookies_captured(cookies))
 
-    def test_missing_required_cookie(self):
+    def test_essential_cookies_only(self):
+        """Succeeds when only essential cookies are present."""
+        cookies = [
+            {"name": "CCLI_JWT_AUTH", "value": "4"},
+            {"name": "ARRAffinity", "value": "1"},
+        ]
+        self.assertTrue(are_cookies_captured(cookies))
+
+    def test_missing_essential_cookie(self):
+        """Fails when an essential cookie is missing."""
         cookies = [
             {"name": "ARRAffinity", "value": "1"},
             {"name": "CCLI_AUTH", "value": "3"},
@@ -138,15 +149,29 @@ class TestAreCookiesCaptured(unittest.TestCase):
         ]
         self.assertFalse(are_cookies_captured(cookies))
 
-    def test_missing_antiforgery(self):
+    def test_missing_arr_affinity(self):
+        """Fails when ARRAffinity is missing."""
         cookies = [
-            {"name": "ARRAffinity", "value": "1"},
-            {"name": "ARRAffinitySameSite", "value": "2"},
-            {"name": "CCLI_AUTH", "value": "3"},
             {"name": "CCLI_JWT_AUTH", "value": "4"},
-            {"name": ".AspNetCore.Session", "value": "5"},
+            {"name": "CCLI_AUTH", "value": "3"},
         ]
         self.assertFalse(are_cookies_captured(cookies))
+
+    def test_optional_cookies_not_required(self):
+        """Succeeds without optional cookies like .AspNetCore.Session."""
+        cookies = [
+            {"name": "CCLI_JWT_AUTH", "value": "4"},
+            {"name": "ARRAffinity", "value": "1"},
+        ]
+        self.assertTrue(are_cookies_captured(cookies))
+
+    def test_antiforgery_not_required(self):
+        """Succeeds without antiforgery cookies."""
+        cookies = [
+            {"name": "CCLI_JWT_AUTH", "value": "4"},
+            {"name": "ARRAffinity", "value": "1"},
+        ]
+        self.assertTrue(are_cookies_captured(cookies))
 
     def test_empty_cookies(self):
         self.assertFalse(are_cookies_captured([]))
@@ -155,7 +180,7 @@ class TestAreCookiesCaptured(unittest.TestCase):
 class TestExtractRequiredCookies(unittest.TestCase):
     """Tests for extract_required_cookies function."""
 
-    def test_filters_required_cookies(self):
+    def test_filters_known_cookies(self):
         cookies = [
             {"name": "ARRAffinity", "value": "1"},
             {"name": "random_cookie", "value": "ignored"},
@@ -167,6 +192,18 @@ class TestExtractRequiredCookies(unittest.TestCase):
         self.assertEqual(result["CCLI_JWT_AUTH"], "4")
         self.assertEqual(result[".AspNetCore.Antiforgery.abc"], "6")
         self.assertNotIn("random_cookie", result)
+
+    def test_captures_optional_cookies(self):
+        """Optional cookies like CCLI_AUTH are captured when present."""
+        cookies = [
+            {"name": "ARRAffinity", "value": "1"},
+            {"name": "CCLI_JWT_AUTH", "value": "4"},
+            {"name": "CCLI_AUTH", "value": "3"},
+            {"name": ".AspNetCore.Session", "value": "5"},
+        ]
+        result = extract_required_cookies(cookies)
+        self.assertEqual(result["CCLI_AUTH"], "3")
+        self.assertEqual(result[".AspNetCore.Session"], "5")
 
     def test_captures_cf_clearance(self):
         """cf_clearance cookie should be captured when present."""
