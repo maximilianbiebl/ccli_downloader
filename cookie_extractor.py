@@ -1,8 +1,22 @@
+import sys
 import time
 import requests
-from selenium import webdriver
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
+
+try:
+    from selenium import webdriver
+    from selenium.webdriver.support.ui import WebDriverWait
+    from selenium.webdriver.support import expected_conditions as EC
+except ImportError as e:
+    print(f"Error: Missing dependency – {e}")
+    print()
+    print("Please install all required packages by running:")
+    print()
+    print("    python -m pip install -r requirements.txt")
+    print()
+    print("Note: use 'python -m pip' (not just 'pip') to make sure packages are")
+    print("installed for the same Python interpreter that runs this script.")
+    print("Do NOT copy package folders into the project directory.")
+    sys.exit(1)
 
 # Optional: import credentials
 import variables  # enthält ccli_userame und ccli_password
